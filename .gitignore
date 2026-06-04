@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+build/
+next-env.d.ts
+
+# Production
+dist/
+
+# Env / Secrets (NIE committen) — nur .env.example wird getrackt
+.env
+.env.*
+!.env.example
+
+# Prisma
+prisma/*.db
+prisma/migrations/dev.db*
+# Generierter Prisma-Client (wird via postinstall/build neu erzeugt)
+apps/web/lib/generated/
+
+# Apify / Crawlee Actor local storage
+actors/*/storage/
+actors/*/apify_storage/
+crawlee_storage/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
