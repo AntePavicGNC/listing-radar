@@ -1,7 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Listing Radar — Datenmodell (SPEC §4)
+// Alle Quellen werden auf EIN Schema gemappt. Vertical-spezifische Felder liegen
+// als nullbare Spalten im Listing-Modell (single table), unterschieden über `vertical`.
 
 generator client {
   provider = "prisma-client"
@@ -10,4 +9,122 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum Source {
+  njuskalo
+  indexoglasi
+  autoscout24
+  mobilede
+}
+
+enum Vertical {
+  house
+  land
+  car
+}
+
+enum ListingStatus {
+  active
+  gone
+}
+
+enum Fuel {
+  diesel
+  petrol
+  hybrid
+  electric
+  other
+}
+
+enum Transmission {
+  manual
+  automatic
+}
+
+model Listing {
+  id              String        @id // Hash aus source + sourceListingId
+  source          Source
+  sourceListingId String
+  vertical        Vertical
+  url             String
+  title           String
+  priceEur        Int
+  images          String[] // Bild-URLs vom Portal-CDN
+  description     String?
+
+  // Ort (flach gespeichert, damit nach Stadt/Region filterbar)
+  locationRaw    String
+  locationCity   String?
+  locationRegion String?
+  lat            Float?
+  lng            Float?
+
+  postedAt    DateTime?
+  firstSeenAt DateTime      @default(now())
+  lastSeenAt  DateTime      @default(now())
+  status      ListingStatus @default(active)
+
+  score        Int     @default(0) // 0-100
+  aiImageScore Int? // 0-100, nur Häuser/Grundstücke
+  aiImageNotes String?
+
+  dedupeKey String? // gerundeter Preis + Fläche/km + Stadt (SPEC §6)
+
+  // --- Haus / Grundstück ---
+  areaLivingM2     Float?
+  areaPlotM2       Float?
+  rooms            Int?
+  yearBuilt        Int?
+  yearRenovated    Int?
+  hasGarden        Boolean?
+  pricePerLivingM2 Float? // abgeleitet
+  zoning           String? // erwartet "gradevinsko" (Baugrund)
+  pricePerM2       Float? // abgeleitet
+
+  // --- Auto ---
+  make                   String?
+  model                  String?
+  variant                String?
+  firstRegistrationYear  Int?
+  firstRegistrationMonth Int?
+  mileageKm              Int?
+  fuel                   Fuel?
+  transmission           Transmission?
+  powerPs                Int?
+  bodyType               String?
+  distanceFromIsmaningKm Float? // abgeleitet
+
+  raw Json? // Original-Datensatz der Quelle
+
+  priceHistory PriceHistory[]
+  userFlag     UserFlag?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([source, sourceListingId])
+  @@index([vertical, status])
+  @@index([dedupeKey])
+  @@index([vertical, score])
+}
+
+model PriceHistory {
+  id        String   @id @default(cuid())
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  date      DateTime @default(now())
+  priceEur  Int
+
+  @@index([listingId])
+}
+
+// Eigene Tabelle, damit Re-Imports die User-Flags NICHT überschreiben (SPEC §4).
+model UserFlag {
+  listingId String   @id
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  favorite  Boolean  @default(false)
+  hidden    Boolean  @default(false) // "raus"
+  seen      Boolean  @default(false)
+  updatedAt DateTime @updatedAt
 }
