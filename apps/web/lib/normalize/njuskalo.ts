@@ -78,7 +78,14 @@ export function normalizeNjuskalo(raw: NjuskaloItem): NormalizedListing | null {
     ...(vertical === "land"
       ? detectZoning(`${raw.title ?? ""} ${raw.shortDescription ?? ""}`)
       : { zoningStated: null, zoningConfirmedBuildingLand: null }),
-    pricePerM2: vertical === "land" ? toNum(raw.pricePerSqm) : null,
+    // Actor liefert pricePerSqm bei Land oft nicht -> aus Preis/Fläche ableiten
+    pricePerM2:
+      vertical === "land"
+        ? (toNum(raw.pricePerSqm) ??
+          (areaLiving != null && areaLiving > 0 && price > 0
+            ? Math.round((price / areaLiving) * 100) / 100
+            : null))
+        : null,
 
     raw,
   };
