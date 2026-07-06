@@ -14,13 +14,22 @@ const SORTS = {
 
 type SortKey = keyof typeof SORTS;
 
-export default async function LandPage(props: { searchParams: Promise<{ sort?: string }> }) {
-  const { sort } = await props.searchParams;
+export default async function LandPage(props: {
+  searchParams: Promise<{ sort?: string; raus?: string }>;
+}) {
+  const { sort, raus } = await props.searchParams;
   const active: SortKey = sort && sort in SORTS ? (sort as SortKey) : "score";
+  const showHidden = raus === "1";
 
   const plots = await prisma.listing.findMany({
-    where: { vertical: "land", status: "active" },
+    where: {
+      vertical: "land",
+      status: "active",
+      // "raus" markierte Inserate sind standardmäßig ausgeblendet (SPEC §11)
+      ...(showHidden ? {} : { OR: [{ userFlag: null }, { userFlag: { hidden: false } }] }),
+    },
     orderBy: SORTS[active].orderBy,
+    include: { userFlag: true },
     take: 90,
   });
 
@@ -37,7 +46,13 @@ export default async function LandPage(props: { searchParams: Promise<{ sort?: s
             </p>
             <h1 className="mt-3 font-heading text-6xl tracking-tight">Grundstücke</h1>
             <p className="mt-3 text-sm text-muted-foreground">
-              {plots.length} aktive Inserate · sortiert nach {SORTS[active].label}
+              {plots.length} aktive Inserate · sortiert nach {SORTS[active].label} ·{" "}
+              <Link
+                href={showHidden ? `/land?sort=${active}` : `/land?sort=${active}&raus=1`}
+                className="underline underline-offset-4 hover:text-foreground"
+              >
+                {showHidden ? "Ausgeblendete verbergen" : "Ausgeblendete zeigen"}
+              </Link>
             </p>
           </div>
           <nav className="flex gap-1 rounded-full bg-muted p-1">

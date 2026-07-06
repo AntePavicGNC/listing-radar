@@ -1,5 +1,7 @@
 // Karte für ein Haus-Inserat (redaktioneller Look). Server-Komponente.
+import Link from "next/link";
 import { ScoreBadge, BreakdownList, listImage, fmtEur } from "./listing-bits";
+import { FlagButtons, type Flags } from "./flag-buttons";
 
 export interface HouseCardData {
   id: string;
@@ -23,6 +25,7 @@ export interface HouseCardData {
   locationCity: string | null;
   locationRegion: string | null;
   url: string;
+  userFlag?: { favorite: boolean; hidden: boolean; seen: boolean } | null;
 }
 
 function Stat({ label, value }: { label: string; value: string | number }) {
@@ -51,9 +54,15 @@ export function HouseCard({ h }: { h: HouseCardData }) {
     h.hasAirConditioning ? "Klima" : null,
   ].filter(Boolean) as string[];
 
+  const flags: Flags = {
+    favorite: h.userFlag?.favorite ?? false,
+    hidden: h.userFlag?.hidden ?? false,
+    seen: h.userFlag?.seen ?? false,
+  };
+
   return (
     <article className="group flex flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10 transition-all duration-300 hover:-translate-y-1 hover:ring-foreground/20 hover:shadow-[0_22px_48px_-28px_oklch(0.24_0.012_60/0.55)]">
-      <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+      <Link href={`/listing/${h.id}`} className="relative block aspect-[4/3] overflow-hidden bg-muted">
         {img ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -80,7 +89,7 @@ export function HouseCard({ h }: { h: HouseCardData }) {
             ))}
           </div>
         ) : null}
-      </div>
+      </Link>
 
       <div className="flex flex-1 flex-col p-4">
         <div className="font-heading text-2xl leading-none tracking-tight">
@@ -97,10 +106,16 @@ export function HouseCard({ h }: { h: HouseCardData }) {
             fmtEur(price)
           )}
         </div>
-        <h3 className="mt-2 line-clamp-2 text-sm leading-snug text-foreground/80">{h.title}</h3>
+        <Link href={`/listing/${h.id}`} className="mt-2 block hover:underline">
+          <h3 className="line-clamp-2 text-sm leading-snug text-foreground/80">{h.title}</h3>
+        </Link>
         <p className="mt-1.5 text-xs uppercase tracking-wide text-muted-foreground">{place}</p>
 
         <BreakdownList breakdown={h.scoreBreakdown} limit={4} className="mt-3" />
+
+        <div className="mt-3">
+          <FlagButtons listingId={h.id} flags={flags} compact />
+        </div>
 
         <dl className="mt-auto grid grid-cols-4 gap-2 border-t border-border pt-3 text-center">
           <Stat label="m²" value={h.areaLivingM2 ?? "–"} />
