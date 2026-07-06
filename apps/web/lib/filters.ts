@@ -13,11 +13,15 @@ export function passesHardFilter(l: NormalizedListing): boolean {
   }
 
   if (l.vertical === "land") {
+    const price = l.displayPriceEur ?? l.priceEur;
     const priceOk =
-      (l.priceEur >= LAND.hard.priceMin && l.priceEur <= LAND.hard.priceMax) ||
+      (price >= LAND.hard.priceMin && price <= LAND.hard.priceMax) ||
       (l.pricePerM2 != null && l.pricePerM2 <= LAND.hard.pricePerM2Max);
-    const zoningOk = (l.zoning ?? "").toLowerCase().includes(LAND.hard.zoningContains);
-    return isAllowedPlace(l.locationRaw) && zoningOk && priceOk;
+    // Raus NUR, wenn eindeutig KEIN Baugrund (Zonierung genannt und nicht bestätigt).
+    // Ohne Zonierungs-Angabe: behalten, Abwertung passiert im Score (SPEC §5/§9).
+    const clearlyNotBuildingLand =
+      l.zoningStated === true && l.zoningConfirmedBuildingLand === false;
+    return isAllowedPlace(l.locationRaw) && !clearlyNotBuildingLand && priceOk;
   }
 
   if (l.vertical === "car") {

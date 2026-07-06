@@ -14,6 +14,20 @@ function toNum(x: unknown): number | null {
 
 type NjuskaloItem = Record<string, unknown>;
 
+// Zonierung aus Titel/Beschreibung ableiten (SPEC §4/§9): erwähnt der Text überhaupt
+// eine Zonierung, und ist Baugrund klar bestätigt? Feinprüfung folgt im Enrichment (Phase 7).
+function detectZoning(text: string): {
+  zoningStated: boolean;
+  zoningConfirmedBuildingLand: boolean | null;
+} {
+  const isBuilding = /gra[dđ]evinsk|bauland|building\s*land/i.test(text);
+  const isAgricultural = /poljoprivredn|agricultur|ackerland|landwirtschaft/i.test(text);
+  return {
+    zoningStated: isBuilding || isAgricultural,
+    zoningConfirmedBuildingLand: isBuilding ? true : isAgricultural ? false : null,
+  };
+}
+
 export function normalizeNjuskalo(raw: NjuskaloItem): NormalizedListing | null {
   const sourceListingId = raw.adId != null ? String(raw.adId) : "";
   if (!sourceListingId) return null;
@@ -57,13 +71,13 @@ export function normalizeNjuskalo(raw: NjuskaloItem): NormalizedListing | null {
     // Njuskalo liefert kein explizites Garten-Feld; Grundstücksfläche als Heuristik.
     hasGarden: areaPlot != null && areaPlot > 0 ? true : null,
     pricePerLivingM2: vertical === "house" ? toNum(raw.pricePerSqm) : null,
-    // Zonierung (gradevinsko) für Grundstücke ggf. aus Titel/Beschreibung ableiten (TODO bei Land-Run).
-    zoning:
-      vertical === "land"
-        ? /gradevinsk|građevinsk/i.test(`${raw.title ?? ""} ${raw.shortDescription ?? ""}`)
-          ? "gradevinsko"
-          : null
+    pricePerPlotM2:
+      vertical === "house" && areaPlot != null && areaPlot > 0
+        ? Math.round((price / areaPlot) * 100) / 100
         : null,
+    ...(vertical === "land"
+      ? detectZoning(`${raw.title ?? ""} ${raw.shortDescription ?? ""}`)
+      : { zoningStated: null, zoningConfirmedBuildingLand: null }),
     pricePerM2: vertical === "land" ? toNum(raw.pricePerSqm) : null,
 
     raw,
