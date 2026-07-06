@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { PushOptIn } from "@/components/push-optin";
 
 // Landing liest Live-Zähler aus der DB -> niemals statisch vorberechnen.
 export const dynamic = "force-dynamic";
@@ -75,6 +76,10 @@ export default async function Home() {
         />
         <Tile href="/houses" title="Häuser" subtitle="80+ m², 100–400k €, Allowlist-Orte." count={c.houses} />
         <Tile href="/cars" title="Autos" subtitle="Automatik, EZ 2023+, um Ismaning." count={c.cars} />
+      </div>
+
+      <div className="mt-8">
+        <PushOptIn />
       </div>
 
       {!c.ok ? (

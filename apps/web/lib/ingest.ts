@@ -6,6 +6,7 @@ import { normalizeItem } from "./normalize";
 import { applyPriceRules } from "./enrich";
 import { passesHardFilter } from "./filters";
 import { computeScore, type ScoreResult } from "./score";
+import { sendPushToAll } from "./push";
 import { dedupeKey } from "./dedupe";
 import type { NormalizedListing, Source } from "./normalize/types";
 
@@ -88,6 +89,9 @@ export async function ingestDataset(source: Source, datasetId: string): Promise<
   let passed = 0;
   let upserted = 0;
   let priceChanges = 0;
+  let newListings = 0;
+  let priceDrops = 0;
+  let firstVertical: string | null = null;
 
   for (const raw of items) {
     const normalized = normalizeItem(source, raw);
@@ -121,13 +125,32 @@ export async function ingestDataset(source: Source, datasetId: string): Promise<
     });
     upserted++;
 
+    firstVertical ??= n.vertical;
+    if (!existing) newListings++;
+
     // Preisverlauf: erste Sichtung ODER Preisänderung protokollieren.
     if (!existing || existing.priceEur !== n.priceEur) {
       await prisma.priceHistory.create({
         data: { listingId: n.id, priceEur: n.priceEur, date: now },
       });
-      if (existing) priceChanges++;
+      if (existing) {
+        priceChanges++;
+        if (n.priceEur < existing.priceEur) priceDrops++;
+      }
     }
+  }
+
+  // Push (SPEC §9): neue Treffer über den Hard-Filtern + Preissenkungen.
+  if (newListings > 0 || priceDrops > 0) {
+    const parts: string[] = [];
+    if (newListings > 0) parts.push(`${newListings} neue Treffer`);
+    if (priceDrops > 0) parts.push(`${priceDrops} Preissenkung${priceDrops > 1 ? "en" : ""}`);
+    const url = firstVertical === "car" ? "/cars" : firstVertical === "land" ? "/land" : "/houses";
+    await sendPushToAll({
+      title: "Listing Radar",
+      body: `${parts.join(" · ")} (${source})`,
+      url,
+    }).catch(() => {}); // Push-Fehler dürfen den Ingest nie brechen
   }
 
   return { source, fetched: items.length, passed, upserted, priceChanges };
