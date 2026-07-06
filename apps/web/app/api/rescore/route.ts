@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeItem } from "@/lib/normalize";
+import { applyPriceRules } from "@/lib/enrich";
 import { passesHardFilter } from "@/lib/filters";
 import { computeScore } from "@/lib/score";
 import { dedupeKey } from "@/lib/dedupe";
@@ -27,8 +28,9 @@ export async function POST(request: Request) {
   let dropped = 0; // besteht die (neuen) Hard-Filter nicht mehr -> status gone
   for (const row of listings) {
     if (row.raw == null) continue;
-    const n = normalizeItem(row.source as Source, row.raw);
-    if (!n) continue;
+    const normalized = normalizeItem(row.source as Source, row.raw);
+    if (!normalized) continue;
+    const n = applyPriceRules(normalized);
 
     if (!passesHardFilter(n)) {
       await prisma.listing.update({ where: { id: row.id }, data: { status: "gone" } });

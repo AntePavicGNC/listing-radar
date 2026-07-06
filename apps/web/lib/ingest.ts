@@ -3,6 +3,7 @@
 import { prisma } from "./prisma";
 import { getDatasetItems } from "./apify";
 import { normalizeItem } from "./normalize";
+import { applyPriceRules } from "./enrich";
 import { passesHardFilter } from "./filters";
 import { computeScore, type ScoreResult } from "./score";
 import { dedupeKey } from "./dedupe";
@@ -89,8 +90,11 @@ export async function ingestDataset(source: Source, datasetId: string): Promise<
   let priceChanges = 0;
 
   for (const raw of items) {
-    const n = normalizeItem(source, raw);
-    if (!n || !passesHardFilter(n)) continue;
+    const normalized = normalizeItem(source, raw);
+    if (!normalized) continue;
+    // Fake-Preis / "Preis auf Anfrage" VOR Filter und Scoring auflösen (SPEC §9)
+    const n = applyPriceRules(normalized);
+    if (!passesHardFilter(n)) continue;
     passed++;
 
     const score = computeScore(n);

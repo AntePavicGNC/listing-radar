@@ -7,10 +7,12 @@ export function passesHardFilter(l: NormalizedListing): boolean {
   const price = l.displayPriceEur ?? l.priceEur;
 
   if (l.vertical === "house") {
+    // "Preis auf Anfrage": Preisband nicht prüfbar -> Inserat behalten und anzeigen (SPEC §9)
+    const priceOk =
+      l.priceOnRequest === true || (price >= HOUSE.hard.priceMin && price <= HOUSE.hard.priceMax);
     return (
       isAllowedPlace(l.locationRaw) &&
-      price >= HOUSE.hard.priceMin &&
-      price <= HOUSE.hard.priceMax &&
+      priceOk &&
       (l.areaLivingM2 ?? 0) >= HOUSE.hard.areaLivingM2Min &&
       // rooms >= 3 ist Hard — aber nur pruefen, wenn die Quelle die Zimmerzahl liefert;
       // fehlende Angabe soll gute Haeuser nicht rauswerfen (Portale sind lueckenhaft)
@@ -20,6 +22,7 @@ export function passesHardFilter(l: NormalizedListing): boolean {
 
   if (l.vertical === "land") {
     const priceOk =
+      l.priceOnRequest === true ||
       (price >= LAND.hard.priceMin && price <= LAND.hard.priceMax) ||
       (l.pricePerM2 != null && l.pricePerM2 <= LAND.hard.pricePerM2Max);
     // Raus NUR, wenn eindeutig KEIN Baugrund (Zonierung genannt und nicht bestätigt).
