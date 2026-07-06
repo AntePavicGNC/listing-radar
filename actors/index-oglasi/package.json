@@ -1,0 +1,21 @@
+{
+  "name": "index-oglasi-scraper",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Index Oglasi (index.hr) Immobilien-Scraper für Listing Radar",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "apify": "^3.2.6",
+    "crawlee": "^3.11.5",
+    "playwright": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^20.0.0"
+  },
+  "scripts": {
+    "start": "node dist/main.js",
+    "start:prod": "node dist/main.js",
+    "build": "tsc"
+  }
+}

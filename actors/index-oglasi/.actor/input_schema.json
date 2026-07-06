@@ -1,0 +1,48 @@
+{
+  "title": "Index Oglasi Scraper Input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "startUrls": {
+      "title": "Such-URLs",
+      "type": "array",
+      "description": "Index-Oglasi-Suchseiten (SPA-Routen), z. B. Kategorie- und Orts-Filter.",
+      "editor": "requestListSources",
+      "prefill": [
+        {
+          "url": "https://www.index.hr/oglasi/nekretnine/prodaja-kuca/zadarska-zupanija"
+        },
+        {
+          "url": "https://www.index.hr/oglasi/nekretnine/prodaja-zemljista/zadarska-zupanija"
+        }
+      ]
+    },
+    "maxItems": {
+      "title": "Max. Inserate gesamt",
+      "type": "integer",
+      "default": 200,
+      "minimum": 1,
+      "description": "Obergrenze gespeicherter Inserate über alle Such-URLs."
+    },
+    "maxScrollRounds": {
+      "title": "Max. Scroll-/Paginierungs-Runden pro URL",
+      "type": "integer",
+      "default": 12,
+      "minimum": 1,
+      "description": "Wie oft pro Such-URL gescrollt/paginiert wird, um weitere Ergebnisse zu laden."
+    },
+    "proxyConfiguration": {
+      "title": "Proxy",
+      "type": "object",
+      "editor": "proxy",
+      "prefill": {
+        "useApifyProxy": true,
+        "apifyProxyCountry": "HR"
+      },
+      "description": "Apify-Proxy (HR empfohlen, Portal ist geo-sensibel)."
+    }
+  },
+  "required": [
+    "startUrls"
+  ]
+}

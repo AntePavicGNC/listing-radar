@@ -45,7 +45,10 @@ export function passesHardFilter(l: NormalizedListing): boolean {
       l.transmission === CAR.hard.transmission &&
       (l.powerPs ?? 0) >= CAR.hard.powerPsMin &&
       (l.mileageKm ?? Infinity) <= CAR.hard.mileageKmMax &&
-      (l.distanceFromIsmaningKm ?? Infinity) <= CAR.hard.distanceFromIsmaningKmMax &&
+      // null-tolerant: AS24/mobile.de sind per Such-Radius vorgefiltert,
+      // AutoHero liefert frei Haus (kein Fahrzeug-Standort)
+      (l.distanceFromIsmaningKm == null ||
+        l.distanceFromIsmaningKm <= CAR.hard.distanceFromIsmaningKmMax) &&
       fuelOk
     );
   }

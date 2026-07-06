@@ -1,0 +1,11 @@
+{
+  "actorSpecification": 1,
+  "name": "index-oglasi-scraper",
+  "title": "Index Oglasi Scraper (Häuser + Grundstücke, Zadar)",
+  "description": "Scrapt Immobilien-Suchergebnisse von index.hr/oglasi (SPA) durch Abgreifen der internen widget-search-API. Teil von Listing Radar.",
+  "version": "0.1",
+  "buildTag": "latest",
+  "meta": { "templateId": "ts-crawlee-playwright-chrome" },
+  "input": "./input_schema.json",
+  "dockerfile": "../Dockerfile"
+}

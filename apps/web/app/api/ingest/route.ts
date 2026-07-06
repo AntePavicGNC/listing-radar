@@ -5,7 +5,7 @@ import type { Source } from "@/lib/normalize/types";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // Ingest darf bis zu 5 min laufen
 
-const VALID_SOURCES: Source[] = ["njuskalo", "indexoglasi", "autoscout24", "mobilede"];
+const VALID_SOURCES: Source[] = ["njuskalo", "indexoglasi", "autoscout24", "mobilede", "autohero"];
 
 // Apify-Webhook (oder manueller Trigger): nimmt source + datasetId entgegen,
 // prüft das INGEST_SECRET und stößt die Pipeline an.

@@ -1,0 +1,11 @@
+{
+  "actorSpecification": 1,
+  "name": "autohero-scraper",
+  "title": "AutoHero Scraper (Autos, Deutschland)",
+  "description": "Scrapt das AutoHero-Inventar (SSR-Seiten, eingebetteter Apollo-State). Teil von Listing Radar.",
+  "version": "0.1",
+  "buildTag": "latest",
+  "meta": { "templateId": "ts-crawlee-cheerio" },
+  "input": "./input_schema.json",
+  "dockerfile": "../Dockerfile"
+}

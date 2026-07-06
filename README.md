@@ -56,6 +56,20 @@ Schema anwenden: `cd apps/web && npx prisma db push`. Client: `npx prisma genera
 3. Environment Variables setzen (siehe Tabelle; Werte aus `apps/web/.env`).
 4. **Deploy.** Buildbefehl ist `prisma generate && next build`.
 
-## Meilensteine
+## Stand (Umbau nach CORRECTIONS.md, Phasen 1–9)
 
-Siehe [SPEC.md](./SPEC.md) §13. Stand: **M1 (Fundament) ✓**, **M2 (Datenmodell) ✓**. Nächster: **M3 (Apify-Ingest)** — benötigt `APIFY_TOKEN`.
+Live: **https://listing-radar-one.vercel.app** (unlisted, ohne Login — SPEC §2).
+
+- ✓ Phase 1 Login entfernt · ✓ Phase 2 Datenmodell (finale SPEC §4) · ✓ Phase 3 Gesamt-Score +
+  Breakdown + `LOCATION_SCORES` · ✓ Phase 4 `/land` · ✓ Phase 5 `/cars` + Finanzierungsrechner ·
+  ✓ Phase 6 Detail/Vergleich/Flags/Override · ✓ Phase 7 regelbasiert (Fake-Preis, Zonierung) ·
+  ✓ Phase 9 Web Push
+- Phase 7 KI-Teile (Bildbewertung, Fair-Preis, Auto-Recherche): warten auf `ANTHROPIC_API_KEY`
+  (`/api/enrich` antwortet solange 501)
+- Phase 8 eigene Actors (`actors/index-oglasi`, `actors/autohero`): auf Apify deployed
+  (`cinnamon_badge/...`), Extraktion in Feinabstimmung
+- Scheduling/Webhooks: `node scripts/apify-wiring.cjs` (legt Webhooks + deaktivierte Schedules an)
+
+**Nützliche Endpoints:** `POST /api/ingest?source=&secret=&datasetId=` (Apify-Webhook/manuell),
+`POST /api/rescore?secret=` (alles aus `raw` neu normalisieren + scoren — nach Gewichts-Tuning in
+[lib/config.ts](./apps/web/lib/config.ts)).
