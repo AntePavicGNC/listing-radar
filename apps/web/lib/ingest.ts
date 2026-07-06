@@ -4,7 +4,7 @@ import { prisma } from "./prisma";
 import { getDatasetItems } from "./apify";
 import { normalizeItem } from "./normalize";
 import { passesHardFilter } from "./filters";
-import { computeScore } from "./score";
+import { computeScore, type ScoreResult } from "./score";
 import { dedupeKey } from "./dedupe";
 import type { NormalizedListing, Source } from "./normalize/types";
 
@@ -16,7 +16,7 @@ export interface IngestResult {
   priceChanges: number;
 }
 
-function commonFields(n: NormalizedListing, score: number, key: string, now: Date) {
+export function commonFields(n: NormalizedListing, s: ScoreResult, key: string, now: Date) {
   return {
     url: n.url,
     title: n.title,
@@ -31,7 +31,10 @@ function commonFields(n: NormalizedListing, score: number, key: string, now: Dat
     postedAt: n.postedAt ?? null,
     lastSeenAt: now,
     status: "active" as const,
-    score,
+    score: s.score,
+    // Cast nötig: Interface ohne Index-Signatur vs. Prismas InputJsonValue
+    scoreBreakdown: s.breakdown as unknown as object[],
+    locationScore: s.locationScore,
     dedupeKey: key,
     displayPriceEur: n.displayPriceEur ?? null,
     priceOnRequest: n.priceOnRequest ?? false,
@@ -90,22 +93,7 @@ export async function ingestDataset(source: Source, datasetId: string): Promise<
     if (!n || !passesHardFilter(n)) continue;
     passed++;
 
-    const score = computeScore({
-      vertical: n.vertical,
-      priceEur: n.priceEur,
-      rooms: n.rooms,
-      hasGarden: n.hasGarden,
-      yearBuilt: n.yearBuilt,
-      yearRenovated: n.yearRenovated,
-      pricePerLivingM2: n.pricePerLivingM2,
-      pricePerM2: n.pricePerM2,
-      aiImageScore: null,
-      mileageKm: n.mileageKm,
-      firstRegistrationYear: n.firstRegistrationYear,
-      fuel: n.fuel,
-      make: n.make,
-      bodyType: n.bodyType,
-    });
+    const score = computeScore(n);
     const key = dedupeKey(n);
     const now = new Date();
 

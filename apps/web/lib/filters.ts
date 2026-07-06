@@ -1,19 +1,24 @@
-// Hard-Filter je Vertical (SPEC §5). True = bleibt drin, False = fliegt raus.
+// Hard-Filter je Vertical (SPEC §5, finale Regeln). True = bleibt drin.
+// Preis-Kriterien rechnen mit displayPriceEur (Fake-Preis-Erkennung, SPEC §9), Fallback priceEur.
 import type { NormalizedListing } from "./normalize/types";
 import { isAllowedPlace, HOUSE, LAND, CAR } from "./config";
 
 export function passesHardFilter(l: NormalizedListing): boolean {
+  const price = l.displayPriceEur ?? l.priceEur;
+
   if (l.vertical === "house") {
     return (
       isAllowedPlace(l.locationRaw) &&
-      l.priceEur >= HOUSE.hard.priceMin &&
-      l.priceEur <= HOUSE.hard.priceMax &&
-      (l.areaLivingM2 ?? 0) >= HOUSE.hard.areaLivingM2Min
+      price >= HOUSE.hard.priceMin &&
+      price <= HOUSE.hard.priceMax &&
+      (l.areaLivingM2 ?? 0) >= HOUSE.hard.areaLivingM2Min &&
+      // rooms >= 3 ist Hard — aber nur pruefen, wenn die Quelle die Zimmerzahl liefert;
+      // fehlende Angabe soll gute Haeuser nicht rauswerfen (Portale sind lueckenhaft)
+      (l.rooms == null || l.rooms >= HOUSE.hard.roomsMin)
     );
   }
 
   if (l.vertical === "land") {
-    const price = l.displayPriceEur ?? l.priceEur;
     const priceOk =
       (price >= LAND.hard.priceMin && price <= LAND.hard.priceMax) ||
       (l.pricePerM2 != null && l.pricePerM2 <= LAND.hard.pricePerM2Max);
@@ -25,14 +30,20 @@ export function passesHardFilter(l: NormalizedListing): boolean {
   }
 
   if (l.vertical === "car") {
+    // Kraftstoff ist Hard: reiner Benziner raus; Elektro nur mit >= 500 km Reichweite
+    const fuelOk =
+      l.fuel != null &&
+      (CAR.hard.allowedFuels as readonly string[]).includes(l.fuel) &&
+      (l.fuel !== "electric" || (l.rangeKm ?? 0) >= CAR.hard.electricMinRangeKm);
     return (
-      l.priceEur >= CAR.hard.priceMin &&
-      l.priceEur <= CAR.hard.priceMax &&
+      price >= CAR.hard.priceMin &&
+      price <= CAR.hard.priceMax &&
       (l.firstRegistrationYear ?? 0) >= CAR.hard.firstRegistrationYearMin &&
       l.transmission === CAR.hard.transmission &&
       (l.powerPs ?? 0) >= CAR.hard.powerPsMin &&
       (l.mileageKm ?? Infinity) <= CAR.hard.mileageKmMax &&
-      (l.distanceFromIsmaningKm ?? Infinity) <= CAR.hard.distanceFromIsmaningKmMax
+      (l.distanceFromIsmaningKm ?? Infinity) <= CAR.hard.distanceFromIsmaningKmMax &&
+      fuelOk
     );
   }
 
