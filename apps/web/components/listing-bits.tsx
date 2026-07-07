@@ -68,7 +68,7 @@ export function parseBreakdown(raw: unknown): ScoreReason[] {
   );
 }
 
-/** Plus-/Minuspunkte-Liste unter dem Score (SPEC §5/§11). */
+/** Kompakte Plus-/Minuspunkte-Liste auf den Karten (nur echte Beiträge, SPEC §5/§11). */
 export function BreakdownList({
   breakdown,
   limit = 4,
@@ -78,7 +78,9 @@ export function BreakdownList({
   limit?: number;
   className?: string;
 }) {
-  const reasons = parseBreakdown(breakdown).slice(0, limit);
+  const reasons = parseBreakdown(breakdown)
+    .filter((r) => r.points !== 0)
+    .slice(0, limit);
   if (reasons.length === 0) return null;
   return (
     <ul className={`space-y-1 text-xs leading-snug ${className}`}>
@@ -95,5 +97,73 @@ export function BreakdownList({
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * Vollständige Score-Zusammensetzung für die Detailseite: alle bewerteten
+ * Kriterien mit Erfüllungsgrad-Balken, Punkte-Beitrag und Gewicht, danach
+ * die Kriterien ohne Angabe (zählen neutral).
+ */
+export function ScoreTable({ breakdown, score }: { breakdown: unknown; score: number }) {
+  const all = parseBreakdown(breakdown);
+  const rated = all.filter((r) => r.pct != null || r.points !== 0);
+  const missing = all.filter((r) => r.pct == null && r.points === 0);
+  if (all.length === 0) return null;
+
+  return (
+    <div className="mt-4 rounded-2xl bg-muted/50 p-4 ring-1 ring-border">
+      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        So setzt sich der Score zusammen
+      </p>
+      <ul className="mt-3 space-y-2">
+        {rated.map((r) => (
+          <li key={r.label} className="text-xs leading-snug">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-foreground/85">{r.label}</span>
+              <span
+                className={`shrink-0 font-semibold tabular-nums ${
+                  r.points > 0 ? "text-primary" : r.points < 0 ? "text-destructive" : "text-muted-foreground"
+                }`}
+              >
+                {r.points > 0 ? `+${r.points}` : r.points}
+                {r.weight != null ? (
+                  <span className="ml-1 font-normal text-muted-foreground">/ ±{r.weight}</span>
+                ) : null}
+              </span>
+            </div>
+            {r.pct != null ? (
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border/60">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${r.pct}%`,
+                    background: r.pct >= 70 ? "oklch(0.46 0.072 148)" : r.pct >= 40 ? "oklch(0.5 0.13 65)" : "oklch(0.55 0.2 27)",
+                  }}
+                />
+              </div>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+
+      {missing.length > 0 ? (
+        <div className="mt-4 border-t border-border/60 pt-3">
+          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Ohne Angabe (zählt neutral, drückt den Score nicht)
+          </p>
+          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+            {missing.map((m) => m.label.replace(/: keine Angabe$/, "")).join(" · ")}
+          </p>
+        </div>
+      ) : null}
+
+      <p className="mt-3 border-t border-border/60 pt-2 text-[11px] leading-relaxed text-muted-foreground">
+        Score {score}/100 = gewichteter Schnitt der bewerteten Kriterien. Punkte = Beitrag
+        relativ zu neutral (max. ± Gewicht); Balken = Erfüllungsgrad des Kriteriums.
+        Gewichte justierbar in <code className="font-mono">lib/config.ts</code>, danach{" "}
+        <code className="font-mono">POST /api/rescore</code>.
+      </p>
+    </div>
   );
 }

@@ -1,7 +1,9 @@
-// lib/score.ts — EIN Gesamt-Score (0-100) je Inserat + Plus-/Minus-Begründung
-// (SPEC §5). Gewichte in lib/config.ts. Fehlende Kriterien zählen neutral (werden
-// aus der gewichteten Summe ausgelassen); einseitige Kriterien (Pool, ACC, Unfall …)
-// zählen nur, wenn die Information vorliegt.
+// lib/score.ts — EIN Gesamt-Score (0-100) je Inserat + VOLLSTÄNDIGE Begründung
+// (SPEC §5). Gewichte in lib/config.ts. Der Breakdown enthält ALLE bewerteten
+// Kriterien ({label, points, weight, pct}) plus die Kriterien, zu denen die
+// Quelle keine Angabe liefert (points 0, "keine Angabe") — so ist sichtbar,
+// wie sich der Score zusammensetzt und was mangels Daten neutral blieb.
+// Score = gewichteter Schnitt der bewerteten Kriterien, normiert auf 0-100.
 import { WEIGHTS, HOUSE, LAND, CAR, getLocationScore } from "./config";
 import type { NormalizedListing, ScoreReason, Vertical } from "./normalize/types";
 
@@ -13,15 +15,28 @@ export type Scorable = Partial<NormalizedListing> & {
 
 export interface ScoreResult {
   score: number; // 0-100
-  breakdown: ScoreReason[]; // wichtigste 3-5 Gründe, positiv und negativ
+  breakdown: ScoreReason[]; // alle Kriterien (bewertet + "keine Angabe")
   locationScore: number | null; // 1-10, wird mitgespeichert (Haus/Grundstück)
 }
 
-/** Ein Kriterium: Gewicht, Erfüllungsgrad 0..1, Anzeige-Label. */
+/** Ein bewertetes Kriterium: Gewicht, Erfüllungsgrad 0..1, Anzeige-Label. */
 interface Part {
   w: number;
   v: number;
   label: string;
+}
+
+/** Sammler: bewertete Kriterien + fehlende Angaben. */
+class Parts {
+  parts: Part[] = [];
+  missing: string[] = [];
+  add(w: number, v: number, label: string) {
+    this.parts.push({ w, v, label });
+  }
+  /** Kriterium, zu dem die Quelle nichts liefert — zählt neutral, wird aber ausgewiesen. */
+  miss(label: string) {
+    this.missing.push(label);
+  }
 }
 
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -36,7 +51,7 @@ function has(x: unknown): x is number {
   return typeof x === "number" && Number.isFinite(x);
 }
 
-/** Gewichteter Schnitt der vorhandenen Kriterien -> 0..100. */
+/** Gewichteter Schnitt der bewerteten Kriterien -> 0..100. */
 function totalScore(parts: Part[]): number {
   const wSum = parts.reduce((s, p) => s + p.w, 0);
   if (wSum === 0) return 0;
@@ -44,15 +59,24 @@ function totalScore(parts: Part[]): number {
 }
 
 /**
- * Breakdown: pro Kriterium signierte Punkte relativ zu "neutral" (v=0.5),
- * die wichtigsten (bis zu 5, mind. |1| Punkt) nach Betrag sortiert.
+ * Vollständiger Breakdown: pro Kriterium signierte Punkte relativ zu "neutral"
+ * (v=0.5), plus Gewicht und Erfüllungsgrad in Prozent. Sortiert nach |points|.
+ * Danach die "keine Angabe"-Kriterien (points 0).
  */
-function toBreakdown(parts: Part[], max = 5): ScoreReason[] {
-  return parts
-    .map((p) => ({ label: p.label, points: Math.round((p.v - 0.5) * 2 * p.w) }))
-    .filter((r) => Math.abs(r.points) >= 1)
-    .sort((a, b) => Math.abs(b.points) - Math.abs(a.points))
-    .slice(0, max);
+function toBreakdown(p: Parts): ScoreReason[] {
+  const rated = p.parts
+    .map((x) => ({
+      label: x.label,
+      points: Math.round((x.v - 0.5) * 2 * x.w),
+      weight: x.w,
+      pct: Math.round(x.v * 100),
+    }))
+    .sort((a, b) => Math.abs(b.points) - Math.abs(a.points));
+  const missing = p.missing.map((label) => ({
+    label: `${label}: keine Angabe`,
+    points: 0,
+  }));
+  return [...rated, ...missing];
 }
 
 function qualify(v: number, goodText: string, okText: string, badText: string): string {
@@ -60,48 +84,38 @@ function qualify(v: number, goodText: string, okText: string, badText: string): 
 }
 
 // ---------------------------------------------------------------- Häuser
-function scoreHouse(l: Scorable): { parts: Part[]; loc: number | null } {
+function scoreHouse(l: Scorable): { p: Parts; loc: number | null } {
   const w = WEIGHTS.house;
-  const parts: Part[] = [];
+  const p = new Parts();
   const price = l.displayPriceEur ?? l.priceEur;
 
   const ppm = l.pricePerLivingM2 ?? (has(l.areaLivingM2) && l.areaLivingM2 > 0 ? price / l.areaLivingM2 : null);
   if (has(ppm)) {
     const v = lowerIsBetter(ppm, HOUSE.pricePerLivingM2Band.good, HOUSE.pricePerLivingM2Band.bad);
-    parts.push({
-      w: w.pricePerM2,
-      v,
-      label: `Preis/Wohn-m² ${Math.round(ppm)} € (${qualify(v, "sehr gut", "im Rahmen", "hoch")})`,
-    });
-  }
+    p.add(w.pricePerM2, v, `Preis/Wohn-m² ${Math.round(ppm)} € (${qualify(v, "sehr gut", "im Rahmen", "hoch")})`);
+  } else p.miss("Preis pro Wohn-m²");
+
   const ppp = l.pricePerPlotM2 ?? (has(l.areaPlotM2) && l.areaPlotM2 > 0 ? price / l.areaPlotM2 : null);
   if (has(ppp)) {
     const v = lowerIsBetter(ppp, HOUSE.pricePerPlotM2Band.good, HOUSE.pricePerPlotM2Band.bad);
-    parts.push({
-      w: w.pricePerPlotM2,
-      v,
-      label: `Preis/Grundstücks-m² ${Math.round(ppp)} € (${qualify(v, "sehr gut", "im Rahmen", "hoch")})`,
-    });
-  }
+    p.add(w.pricePerPlotM2, v, `Preis/Grundstücks-m² ${Math.round(ppp)} € (${qualify(v, "sehr gut", "im Rahmen", "hoch")})`);
+  } else p.miss("Preis pro Grundstücks-m²");
 
   const loc = getLocationScore(l.locationRaw ?? null);
-  if (loc) {
-    parts.push({
-      w: w.locationScore,
-      v: (loc.score - 1) / 9,
-      label: `Ort ${loc.place} (${loc.score}/10)`,
-    });
-  }
+  if (loc) p.add(w.locationScore, (loc.score - 1) / 9, `Ort ${loc.place} (${loc.score}/10)`);
+  else p.miss("Location-Score (Ort nicht in Tabelle)");
 
   if (has(l.areaLivingM2)) {
     const inSpot = l.areaLivingM2 >= HOUSE.sweetSpot.livingM2Min && l.areaLivingM2 <= HOUSE.sweetSpot.livingM2Max;
-    // Über dem Sweet Spot neutral (kein Abzug, kein Bonus) -> v=0.5 erzeugt keinen Breakdown-Eintrag
-    parts.push({
-      w: w.livingSize,
-      v: inSpot ? 1 : 0.5,
-      label: `${Math.round(l.areaLivingM2)} m² Wohnfläche im Sweet Spot 80-140`,
-    });
-  }
+    p.add(
+      w.livingSize,
+      inSpot ? 1 : 0.5, // über dem Sweet Spot neutral (kein Abzug, kein Bonus)
+      inSpot
+        ? `${Math.round(l.areaLivingM2)} m² Wohnfläche im Sweet Spot 80-140`
+        : `${Math.round(l.areaLivingM2)} m² Wohnfläche (über Sweet Spot, neutral)`,
+    );
+  } else p.miss("Wohnfläche");
+
   if (has(l.areaPlotM2) && l.areaPlotM2 > 0) {
     const a = l.areaPlotM2;
     const v =
@@ -112,91 +126,73 @@ function scoreHouse(l: Scorable): { parts: Part[]; loc: number | null } {
           : a >= 150
             ? 0.5
             : 0.25;
-    parts.push({
-      w: w.plotSize,
+    p.add(
+      w.plotSize,
       v,
-      label:
-        v === 1
-          ? `Grundstück ${Math.round(a)} m² im Sweet Spot 300-400`
-          : `Grundstück ${Math.round(a)} m²`,
-    });
-  }
+      v === 1 ? `Grundstück ${Math.round(a)} m² im Sweet Spot 300-400` : `Grundstück ${Math.round(a)} m²`,
+    );
+  } else p.miss("Grundstücksfläche");
 
   if (has(l.rooms)) {
-    const v = l.rooms >= HOUSE.sweetSpot.roomsIdeal ? 1 : 0.4; // Hard-Filter garantiert >= 3
-    parts.push({
-      w: w.rooms,
-      v,
-      label: l.rooms >= HOUSE.sweetSpot.roomsIdeal ? `${l.rooms} Zimmer (Ideal erreicht)` : `${l.rooms} Zimmer (Minimum)`,
-    });
-  }
+    const ideal = l.rooms >= HOUSE.sweetSpot.roomsIdeal;
+    p.add(w.rooms, ideal ? 1 : 0.4, ideal ? `${l.rooms} Zimmer (Ideal erreicht)` : `${l.rooms} Zimmer (Minimum)`);
+  } else p.miss("Zimmerzahl");
+
   if (has(l.bathroomCount) && l.bathroomCount >= 1) {
     const v = l.bathroomCount >= HOUSE.sweetSpot.bathroomsIdeal ? 1 : 0.6;
-    parts.push({ w: w.bathroom, v, label: `${l.bathroomCount} Bad/Bäder` });
-  }
+    p.add(w.bathroom, v, `${l.bathroomCount} Bad/Bäder`);
+  } else p.miss("Bäder");
 
-  // Ausstattung: einseitig positiv, zählt nur bei bekanntem true (bzw. explizitem false bei Garten)
-  if (l.hasGarden != null) parts.push({ w: w.garden, v: l.hasGarden ? 1 : 0.2, label: l.hasGarden ? "Garten vorhanden" : "Kein Garten" });
-  if (l.hasParkingSpot === true) parts.push({ w: w.parking, v: 1, label: "Stellplatz vorhanden" });
-  if (l.hasGarage === true) parts.push({ w: w.garage, v: 1, label: "Garage vorhanden" });
-  if (l.hasPool === true) parts.push({ w: w.pool, v: 1, label: "Pool vorhanden" });
-  if (l.hasAuxiliaryBuilding === true) parts.push({ w: w.auxBuilding, v: 1, label: "Nebengebäude (z. B. Sommerküche)" });
-  if (l.hasAirConditioning === true) parts.push({ w: w.airConditioning, v: 1, label: "Klimaanlage" });
+  if (l.hasGarden != null) p.add(w.garden, l.hasGarden ? 1 : 0.2, l.hasGarden ? "Garten vorhanden" : "Kein Garten");
+  else p.miss("Garten");
+  if (l.hasParkingSpot === true) p.add(w.parking, 1, "Stellplatz vorhanden");
+  else p.miss("Stellplatz");
+  if (l.hasGarage === true) p.add(w.garage, 1, "Garage vorhanden");
+  else p.miss("Garage");
+  if (l.hasPool === true) p.add(w.pool, 1, "Pool vorhanden");
+  else p.miss("Pool");
+  if (l.hasAuxiliaryBuilding === true) p.add(w.auxBuilding, 1, "Nebengebäude (z. B. Sommerküche)");
+  else p.miss("Nebengebäude");
+  if (l.hasAirConditioning === true) p.add(w.airConditioning, 1, "Klimaanlage");
+  else p.miss("Klimaanlage");
 
-  // Baujahr/Renovierung, gestuft (2020 Basis, 2022 mehr, 2024 Maximum)
   const modernYear = Math.max(l.yearBuilt ?? 0, l.yearRenovated ?? 0);
   if (modernYear > 0) {
     const t = HOUSE.modernTiers;
     const v = modernYear >= t.max ? 1 : modernYear >= t.better ? 0.8 : modernYear >= t.base ? 0.6 : modernYear >= 2010 ? 0.35 : 0.1;
-    parts.push({
-      w: w.modern,
-      v,
-      label: `${l.yearRenovated && l.yearRenovated >= (l.yearBuilt ?? 0) ? "Renoviert" : "Baujahr"} ${modernYear}`,
-    });
-  }
+    p.add(w.modern, v, `${l.yearRenovated && l.yearRenovated >= (l.yearBuilt ?? 0) ? "Renoviert" : "Baujahr"} ${modernYear}`);
+  } else p.miss("Baujahr/Renovierung");
+
   if (l.renovationNeeded != null) {
     const map = { none: 1, light: 0.8, moderate: 0.4, heavy: 0 } as const;
     const txt = { none: "Kein Renovierungsbedarf", light: "Leichter Renovierungsbedarf", moderate: "Mittlerer Renovierungsbedarf", heavy: "Starker Renovierungsbedarf" } as const;
-    parts.push({ w: w.renovation, v: map[l.renovationNeeded], label: txt[l.renovationNeeded] });
-  }
-  if (l.hasSeaViewLikely === true) parts.push({ w: w.seaView, v: 1, label: "Meerblick wahrscheinlich" });
-  if (l.looksLikeTouristRental === true) parts.push({ w: w.touristPenalty, v: 0, label: "Wirkt wie Ferienvermietungs-Objekt" });
+    p.add(w.renovation, map[l.renovationNeeded], txt[l.renovationNeeded]);
+  } else p.miss("Renovierungsbedarf (KI-Bild)");
 
-  if (has(l.aiImageScore)) {
-    parts.push({
-      w: w.aiImage,
-      v: clamp01(l.aiImageScore / 100),
-      label: `KI-Bildeindruck ${l.aiImageScore}/100`,
-    });
-  }
+  if (l.hasSeaViewLikely === true) p.add(w.seaView, 1, "Meerblick wahrscheinlich");
+  if (l.looksLikeTouristRental === true) p.add(w.touristPenalty, 0, "Wirkt wie Ferienvermietungs-Objekt");
 
-  return { parts, loc: loc?.score ?? null };
+  if (has(l.aiImageScore)) p.add(w.aiImage, clamp01(l.aiImageScore / 100), `KI-Bildeindruck ${l.aiImageScore}/100`);
+  else p.miss("KI-Bildbewertung");
+
+  return { p, loc: loc?.score ?? null };
 }
 
 // ---------------------------------------------------------------- Grundstücke
-function scoreLand(l: Scorable): { parts: Part[]; loc: number | null } {
+function scoreLand(l: Scorable): { p: Parts; loc: number | null } {
   const w = WEIGHTS.land;
-  const parts: Part[] = [];
+  const p = new Parts();
   const price = l.displayPriceEur ?? l.priceEur;
 
   const ppm = l.pricePerM2 ?? (has(l.areaPlotM2) && l.areaPlotM2 > 0 ? price / l.areaPlotM2 : null);
   if (has(ppm)) {
     const v = lowerIsBetter(ppm, LAND.pricePerM2Band.good, LAND.pricePerM2Band.bad);
-    parts.push({
-      w: w.pricePerM2,
-      v,
-      label: `Preis/m² ${Math.round(ppm)} € (${qualify(v, "sehr gut", "im Rahmen", "hoch")})`,
-    });
-  }
+    p.add(w.pricePerM2, v, `Preis/m² ${Math.round(ppm)} € (${qualify(v, "sehr gut", "im Rahmen", "hoch")})`);
+  } else p.miss("Preis pro m²");
 
   const loc = getLocationScore(l.locationRaw ?? null);
-  if (loc) {
-    parts.push({
-      w: w.locationScore,
-      v: (loc.score - 1) / 9,
-      label: `Ort ${loc.place} (${loc.score}/10)`,
-    });
-  }
+  if (loc) p.add(w.locationScore, (loc.score - 1) / 9, `Ort ${loc.place} (${loc.score}/10)`);
+  else p.miss("Location-Score (Ort nicht in Tabelle)");
 
   if (has(l.areaPlotM2) && l.areaPlotM2 > 0) {
     const a = l.areaPlotM2;
@@ -209,32 +205,23 @@ function scoreLand(l: Scorable): { parts: Part[]; loc: number | null } {
           : a >= s.plotM2Min
             ? 0.5 + (0.5 * (a - s.plotM2Min)) / (s.idealMin - s.plotM2Min)
             : 0.2;
-    parts.push({
-      w: w.plotSize,
+    p.add(
+      w.plotSize,
       v,
-      label:
-        a >= s.idealMin && a <= s.idealMax
-          ? `${Math.round(a)} m², passt zum Sweet Spot 700-800`
-          : `${Math.round(a)} m² Fläche`,
-    });
-  }
+      a >= s.idealMin && a <= s.idealMax
+        ? `${Math.round(a)} m², passt zum Sweet Spot 700-800`
+        : `${Math.round(a)} m² Fläche`,
+    );
+  } else p.miss("Fläche");
 
-  if (has(l.aiImageScore)) {
-    parts.push({
-      w: w.aiImage,
-      v: clamp01(l.aiImageScore / 100),
-      label: `KI-Bildeindruck ${l.aiImageScore}/100`,
-    });
-  }
+  if (has(l.aiImageScore)) p.add(w.aiImage, clamp01(l.aiImageScore / 100), `KI-Bildeindruck ${l.aiImageScore}/100`);
+  else p.miss("KI-Bildbewertung");
 
-  // Zonierung: bestätigt = Plus, gar nicht angegeben = Abwertung + Hinweis (SPEC §9)
-  if (l.zoningConfirmedBuildingLand === true) {
-    parts.push({ w: w.zoningUnclear, v: 1, label: "Baugrund bestätigt" });
-  } else if (l.zoningStated === false || l.zoningStated == null) {
-    parts.push({ w: w.zoningUnclear, v: 0, label: "Zonierung unklar, bitte selbst prüfen" });
-  }
+  if (l.zoningConfirmedBuildingLand === true) p.add(w.zoningUnclear, 1, "Baugrund bestätigt");
+  else if (l.zoningStated === false || l.zoningStated == null)
+    p.add(w.zoningUnclear, 0, "Zonierung unklar, bitte selbst prüfen");
 
-  return { parts, loc: loc?.score ?? null };
+  return { p, loc: loc?.score ?? null };
 }
 
 // ---------------------------------------------------------------- Autos
@@ -245,15 +232,15 @@ function detectAccidentMention(text: string): boolean {
   );
 }
 
-function scoreCar(l: Scorable): { parts: Part[]; loc: number | null } {
+function scoreCar(l: Scorable): { p: Parts; loc: number | null } {
   const w = WEIGHTS.car;
-  const parts: Part[] = [];
+  const p = new Parts();
   const price = l.displayPriceEur ?? l.priceEur;
 
-  if (l.hasAdaptiveCruiseControl === true)
-    parts.push({ w: w.adaptiveCruise, v: 1, label: "Adaptiver Tempomat (ACC)" });
-  if (l.hasParkingCamera === true)
-    parts.push({ w: w.parkingCamera, v: 1, label: "Einparkhilfe mit Kamera" });
+  if (l.hasAdaptiveCruiseControl === true) p.add(w.adaptiveCruise, 1, "Adaptiver Tempomat (ACC)");
+  else p.miss("Adaptiver Tempomat (nicht in Ausstattung gefunden)");
+  if (l.hasParkingCamera === true) p.add(w.parkingCamera, 1, "Einparkhilfe mit Kamera");
+  else p.miss("Einparkkamera (nicht in Ausstattung gefunden)");
 
   if (l.infotainmentGeneration != null && l.infotainmentGeneration !== "unknown") {
     const map = { latest: 1, previous: 0.35, older: 0 } as const;
@@ -262,26 +249,18 @@ function scoreCar(l: Scorable): { parts: Part[]; loc: number | null } {
       previous: "Infotainment der Vorgänger-Generation",
       older: "Älteres Infotainment-System",
     } as const;
-    parts.push({
-      w: w.infotainmentLatest,
-      v: map[l.infotainmentGeneration],
-      label: txt[l.infotainmentGeneration],
-    });
-  }
+    p.add(w.infotainmentLatest, map[l.infotainmentGeneration], txt[l.infotainmentGeneration]);
+  } else p.miss("Infotainment-Generation (KI-Recherche)");
 
   if (l.description && detectAccidentMention(l.description)) {
-    parts.push({ w: w.accidentPenalty, v: 0, label: "Unfall/Schäden in Beschreibung erwähnt" });
+    p.add(w.accidentPenalty, 0, "Unfall/Schäden in Beschreibung erwähnt");
   }
 
   if (l.make) {
     const preferred = CAR.soft.preferredMakes.map((m) => m.toLowerCase());
     const isPref = preferred.some((m) => l.make!.toLowerCase().includes(m));
-    parts.push({
-      w: w.preferredMake,
-      v: isPref ? 1 : 0.4,
-      label: isPref ? `${l.make} (bevorzugte Marke)` : `Marke ${l.make}`,
-    });
-  }
+    p.add(w.preferredMake, isPref ? 1 : 0.4, isPref ? `${l.make} (bevorzugte Marke)` : `Marke ${l.make}`);
+  } else p.miss("Marke");
 
   if (l.bodyType != null) {
     const map = { limousine: 1, suv_coupe: 0.8, kombi: 0.5, other: 0.5, suv: 0.25, sportback: 0.15 } as const;
@@ -293,48 +272,38 @@ function scoreCar(l: Scorable): { parts: Part[]; loc: number | null } {
       suv: "Kastenförmiges SUV",
       sportback: "Sportback/Fließheck (unerwünscht)",
     } as const;
-    parts.push({ w: w.bodyStyle, v: map[l.bodyType], label: txt[l.bodyType] });
-  }
+    p.add(w.bodyStyle, map[l.bodyType], txt[l.bodyType]);
+  } else p.miss("Karosserieform");
 
   if (has(l.powerPs)) {
     const v = l.powerPs >= CAR.soft.bonusPowerPs ? 1 : clamp01((l.powerPs - CAR.hard.powerPsMin) / (CAR.soft.bonusPowerPs - CAR.hard.powerPsMin)) * 0.6;
-    parts.push({
-      w: w.powerBonus,
-      v,
-      label: l.powerPs >= CAR.soft.bonusPowerPs ? `${l.powerPs} PS (>= 150)` : `${l.powerPs} PS`,
-    });
-  }
+    p.add(w.powerBonus, v, l.powerPs >= CAR.soft.bonusPowerPs ? `${l.powerPs} PS (>= 150)` : `${l.powerPs} PS`);
+  } else p.miss("Leistung");
 
   if (has(l.mileageKm)) {
     const v = lowerIsBetter(l.mileageKm, 0, CAR.hard.mileageKmMax);
-    parts.push({
-      w: w.lowMileage,
-      v,
-      label: `${Math.round(l.mileageKm / 1000)} tkm (${qualify(v, "sehr wenig", "ok", "viel")})`,
-    });
-  }
+    p.add(w.lowMileage, v, `${Math.round(l.mileageKm / 1000)} tkm (${qualify(v, "sehr wenig", "ok", "viel")})`);
+  } else p.miss("Kilometerstand");
+
   if (has(l.firstRegistrationYear)) {
     const v = clamp01((l.firstRegistrationYear - CAR.hard.firstRegistrationYearMin) / 3);
-    parts.push({ w: w.newerYear, v, label: `Erstzulassung ${l.firstRegistrationYear}` });
-  }
+    p.add(w.newerYear, v, `Erstzulassung ${l.firstRegistrationYear}`);
+  } else p.miss("Erstzulassung");
+
   {
     const v = lowerIsBetter(price, CAR.hard.priceMin, CAR.hard.priceMax);
-    parts.push({
-      w: w.lowerPrice,
-      v,
-      label: `Preis ${Math.round(price / 1000)}k € im Band (${qualify(v, "günstig", "mittig", "oben")})`,
-    });
+    p.add(w.lowerPrice, v, `Preis ${Math.round(price / 1000)}k € im Band (${qualify(v, "günstig", "mittig", "oben")})`);
   }
 
-  return { parts, loc: null };
+  return { p, loc: null };
 }
 
 /**
- * Berechnet Gesamt-Score (0-100), Breakdown und Location-Score eines
- * normalisierten Inserats. Anzeige-Logik: `scoreOverride ?? score` (SPEC §9).
+ * Berechnet Gesamt-Score (0-100), vollständigen Breakdown und Location-Score.
+ * Anzeige-Logik: `scoreOverride ?? score` (SPEC §9).
  */
 export function computeScore(l: Scorable): ScoreResult {
-  const { parts, loc } =
+  const { p, loc } =
     l.vertical === "house" ? scoreHouse(l) : l.vertical === "land" ? scoreLand(l) : scoreCar(l);
-  return { score: totalScore(parts), breakdown: toBreakdown(parts), locationScore: loc };
+  return { score: totalScore(p.parts), breakdown: toBreakdown(p), locationScore: loc };
 }

@@ -21,7 +21,16 @@ export async function POST(request: Request) {
   }
 
   const listings = await prisma.listing.findMany({
-    select: { id: true, source: true, raw: true, aiImageScore: true },
+    select: {
+      id: true,
+      source: true,
+      raw: true,
+      // KI-Anreicherung bleibt beim Rescore erhalten (kommt nicht aus raw)
+      aiImageScore: true,
+      hasSeaViewLikely: true,
+      looksLikeTouristRental: true,
+      renovationNeeded: true,
+    },
   });
 
   let rescored = 0;
@@ -30,7 +39,13 @@ export async function POST(request: Request) {
     if (row.raw == null) continue;
     const normalized = normalizeItem(row.source as Source, row.raw);
     if (!normalized) continue;
-    const n = applyPriceRules(normalized);
+    // KI-Felder in das normalisierte Objekt mergen, damit Score UND Speicherung sie behalten
+    const n = {
+      ...applyPriceRules(normalized),
+      hasSeaViewLikely: row.hasSeaViewLikely,
+      looksLikeTouristRental: row.looksLikeTouristRental,
+      renovationNeeded: row.renovationNeeded,
+    };
 
     if (!passesHardFilter(n)) {
       await prisma.listing.update({ where: { id: row.id }, data: { status: "gone" } });

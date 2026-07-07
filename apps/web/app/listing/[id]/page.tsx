@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { Gallery } from "@/components/gallery";
 import { FlagButtons } from "@/components/flag-buttons";
-import { ScoreBadge, BreakdownList, listImage, fmtEur } from "@/components/listing-bits";
+import { ScoreBadge, ScoreTable, listImage, fmtEur } from "@/components/listing-bits";
 import { SiteNav } from "@/components/site-nav";
 import { setScoreOverride } from "@/app/actions";
 import { financingLabel } from "@/lib/finance";
@@ -104,7 +104,7 @@ export default async function ListingDetail(props: PageProps<"/listing/[id]">) {
               <p className="mt-2 text-xs italic text-muted-foreground">Notiz: {l.scoreOverrideNote}</p>
             ) : null}
 
-            <BreakdownList breakdown={l.scoreBreakdown} limit={99} className="mt-4" />
+            <ScoreTable breakdown={l.scoreBreakdown} score={l.score} />
 
             <h1 className="mt-6 font-heading text-3xl leading-tight tracking-tight">{l.title}</h1>
             <div className="mt-3 font-heading text-4xl tracking-tight">

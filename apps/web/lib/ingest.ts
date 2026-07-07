@@ -101,14 +101,28 @@ export async function ingestDataset(source: Source, datasetId: string): Promise<
     if (!passesHardFilter(n)) continue;
     passed++;
 
-    const score = computeScore(n);
     const key = dedupeKey(n);
     const now = new Date();
 
     const existing = await prisma.listing.findUnique({
       where: { id: n.id },
-      select: { priceEur: true },
+      select: {
+        priceEur: true,
+        // KI-Anreicherung überlebt Re-Imports (SPEC §9: läuft nur beim ersten Erscheinen)
+        aiImageScore: true,
+        hasSeaViewLikely: true,
+        looksLikeTouristRental: true,
+        renovationNeeded: true,
+      },
     });
+    if (existing) {
+      n.hasSeaViewLikely ??= existing.hasSeaViewLikely;
+      n.looksLikeTouristRental ??= existing.looksLikeTouristRental;
+      n.renovationNeeded ??= existing.renovationNeeded;
+    }
+
+    // Score NACH dem KI-Merge berechnen, damit die Anreicherung einfließt
+    const score = computeScore({ ...n, aiImageScore: existing?.aiImageScore ?? null });
 
     const fields = commonFields(n, score, key, now);
     await prisma.listing.upsert({

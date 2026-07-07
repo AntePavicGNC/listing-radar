@@ -8,10 +8,12 @@ export type RenovationNeeded = "none" | "light" | "moderate" | "heavy";
 export type InfotainmentGeneration = "latest" | "previous" | "older" | "unknown";
 export type BodyType = "limousine" | "sportback" | "suv" | "suv_coupe" | "kombi" | "other";
 
-/** Ein Plus-/Minuspunkt in der Score-Begründung (SPEC §4/§5). */
+/** Ein Kriterium in der Score-Begründung (SPEC §4/§5). */
 export interface ScoreReason {
-  label: string; // z. B. "Preis pro m² sehr gut", "Ort eher schwach"
-  points: number; // positiv oder negativ
+  label: string; // z. B. "Preis/m² 73 € (sehr gut)" oder "Pool: keine Angabe"
+  points: number; // Beitrag relativ zu neutral (positiv/negativ; 0 = neutral/fehlt)
+  weight?: number; // Gewicht des Kriteriums (aus config.WEIGHTS)
+  pct?: number; // Erfüllungsgrad 0-100 % (nur bewertete Kriterien)
 }
 
 export interface NormalizedListing {
