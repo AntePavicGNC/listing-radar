@@ -8,6 +8,7 @@ import {
   detectParkingCamera,
   mapFuel,
   mapBodyType,
+  correctBodyType,
   stripHtml,
 } from "./car-common";
 
@@ -90,7 +91,7 @@ export function normalizeAutoscout24(raw: Any): NormalizedListing | null {
           ? "manual"
           : null,
     powerPs: v.engine?.power?.hp?.raw ?? null,
-    bodyType: mapBodyType(v.bodyType?.raw ?? v.bodyType?.formatted),
+    bodyType: correctBodyType(mapBodyType(v.bodyType?.raw ?? v.bodyType?.formatted), model, raw.webPage),
     distanceFromIsmaningKm: distanceFromIsmaningKm(lat, lng) ?? null,
     hasAdaptiveCruiseControl: detectAcc(equipmentText),
     hasParkingCamera: detectParkingCamera(equipmentText),

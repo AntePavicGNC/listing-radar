@@ -21,10 +21,16 @@ const SLUGS = ["zadar","bibinje","sukosan","nin","privlaka","razanac","vrsi","pe
 const PROXY_HR = { useApifyProxy: true, apifyProxyGroups: ["RESIDENTIAL"], apifyProxyCountry: "HR" };
 const PROXY_DE = { useApifyProxy: true, apifyProxyGroups: ["RESIDENTIAL"] };
 
-const AS24_URL =
-  "https://www.autoscout24.de/lst?atype=C&cy=D&damaged_listing=exclude&desc=0&fregfrom=2023&gear=A&kmto=70000&powerfrom=81&powertype=kw&pricefrom=18000&priceto=30000&sort=standard&ustate=N%2CU&zip=85737&zipr=200";
-const MOBILE_URL =
-  "https://suchen.mobile.de/fahrzeuge/search.html?dam=false&isSearchRequest=true&fr=2023%3A&ml=%3A70000&p=18000%3A30000&tr=AUTOMATIC_GEAR&pw=81%3A&ll=48.2236%2C11.6717&rd=200&s=Car&vc=Car";
+// Zwei Suchen je Portal: allgemein + gezielt BMW (Ante bevorzugt BMW/Limousine;
+// die generische Suche liefert sonst fast nur VW). mobile.de ms=3500 = BMW.
+const AS24_URLS = [
+  "https://www.autoscout24.de/lst?atype=C&cy=D&damaged_listing=exclude&desc=0&fregfrom=2023&gear=A&kmto=70000&powerfrom=81&powertype=kw&pricefrom=18000&priceto=30000&sort=standard&ustate=N%2CU&zip=85737&zipr=200",
+  "https://www.autoscout24.de/lst/bmw?atype=C&cy=D&damaged_listing=exclude&desc=0&fregfrom=2021&gear=A&kmto=90000&powerfrom=81&powertype=kw&pricefrom=18000&priceto=30000&sort=standard&ustate=N%2CU&zip=85737&zipr=200",
+];
+const MOBILE_URLS = [
+  "https://suchen.mobile.de/fahrzeuge/search.html?dam=false&isSearchRequest=true&fr=2023%3A&ml=%3A70000&p=18000%3A30000&tr=AUTOMATIC_GEAR&pw=81%3A&ll=48.2236%2C11.6717&rd=200&s=Car&vc=Car",
+  "https://suchen.mobile.de/fahrzeuge/search.html?dam=false&isSearchRequest=true&fr=2021%3A&ml=%3A90000&ms=3500%3B%3B%3B&p=18000%3A30000&tr=AUTOMATIC_GEAR&pw=81%3A&ll=48.2236%2C11.6717&rd=200&s=Car&vc=Car",
+];
 
 async function api(method, path, body) {
   const r = await fetch(`https://api.apify.com/v2${path}`, {
@@ -65,11 +71,11 @@ async function api(method, path, body) {
     console.log(`WEBHOOK ${a.source}: ${res.status === 201 ? "angelegt" : res.status + " " + JSON.stringify(res.data).slice(0, 120)}`);
   }
 
-  // ---- 2) Schedules (DEAKTIVIERT): Immobilien 1x/Tag, Autos 2x/Tag (SPEC §7)
+  // ---- 2) Schedules: Immobilien 1x/Woche (Mo), Autos 1x/Tag (Takt von Ante, Starter-Plan)
   const schedules = [
     {
-      name: "listing-radar-njuskalo-daily",
-      cronExpression: "30 5 * * *",
+      name: "listing-radar-njuskalo-weekly",
+      cronExpression: "30 5 * * 1",
       actorId: "logiover~njuskalo-hr-property-scraper",
       runs: [
         { locationSlugs: SLUGS, transaction: "sale", propertyType: "land", priceMin: 5000, priceMax: 115000, maxListings: 250, maxPagesPerTask: 3, proxyConfiguration: PROXY_HR },
@@ -77,27 +83,52 @@ async function api(method, path, body) {
       ],
     },
     {
-      name: "listing-radar-autoscout24-2x",
-      cronExpression: "0 6,18 * * *",
+      name: "listing-radar-autoscout24-daily",
+      cronExpression: "0 6 * * *",
       actorId: "memo23~autoscout24-scraper",
-      runs: [{ startUrls: [{ url: AS24_URL }], filterCountries: ["D"], maxItems: 120, proxy: PROXY_DE }],
+      runs: [{ startUrls: AS24_URLS.map((url) => ({ url })), filterCountries: ["D"], maxItems: 200, proxy: PROXY_DE }],
     },
     {
-      name: "listing-radar-mobilede-2x",
-      cronExpression: "15 6,18 * * *",
+      name: "listing-radar-mobilede-daily",
+      cronExpression: "15 6 * * *",
       actorId: "memo23~mobile-de-scraper",
-      runs: [{ startUrls: [{ url: MOBILE_URL }], maxItems: 150, proxy: PROXY_DE }],
+      runs: [{ startUrls: MOBILE_URLS.map((url) => ({ url })), maxItems: 250, proxy: PROXY_DE }],
+    },
+    {
+      name: "listing-radar-autohero-daily",
+      cronExpression: "30 6 * * *",
+      actorId: "cinnamon_badge~autohero-scraper",
+      runs: [
+        {
+          startUrls: [{ url: "https://www.autohero.com/de/search/?priceMin=18000&priceMax=30000&yearMin=2023&gearBox=AUTOMATIC" }],
+          maxItems: 150,
+          maxPages: 8,
+          proxyConfiguration: { useApifyProxy: true, apifyProxyGroups: ["RESIDENTIAL"], apifyProxyCountry: "DE" },
+        },
+      ],
+    },
+    {
+      name: "listing-radar-indexoglasi-weekly",
+      cronExpression: "0 6 * * 1",
+      actorId: "cinnamon_badge~index-oglasi-scraper",
+      runs: [
+        {
+          startUrls: [
+            { url: "https://www.index.hr/oglasi/nekretnine/prodaja-kuca/zadarska-zupanija" },
+            { url: "https://www.index.hr/oglasi/nekretnine/prodaja-zemljista/zadarska-zupanija" },
+          ],
+          maxItems: 150,
+          maxScrollRounds: 10,
+          proxyConfiguration: { useApifyProxy: true, apifyProxyGroups: ["RESIDENTIAL"], apifyProxyCountry: "HR" },
+        },
+      ],
     },
   ];
 
   const existingSchedules = await api("GET", "/schedules?limit=100");
-  const haveSched = new Set((existingSchedules.data.items ?? []).map((s) => s.name));
+  const schedByName = new Map((existingSchedules.data.items ?? []).map((s) => [s.name, s.id]));
 
   for (const s of schedules) {
-    if (haveSched.has(s.name)) {
-      console.log(`SCHEDULE ${s.name}: existiert schon`);
-      continue;
-    }
     const info = await api("GET", `/acts/${s.actorId}`);
     const actorId = info.data?.id;
     if (!actorId) {
@@ -109,14 +140,20 @@ async function api(method, path, body) {
       actorId,
       runInput: { body: JSON.stringify(input), contentType: "application/json; charset=utf-8" },
     }));
-    const res = await api("POST", "/schedules", {
+    const body = {
       name: s.name,
       cronExpression: s.cronExpression,
       timezone: "Europe/Berlin",
-      isEnabled: false, // bewusst AUS — Kosten-Entscheidung liegt bei Ante
+      isEnabled: true, // Takt von Ante festgelegt (Starter-Plan): Immobilien 1x/Woche, Autos 1x/Tag
       isExclusive: true,
       actions,
-    });
-    console.log(`SCHEDULE ${s.name}: ${res.status === 201 ? "angelegt (deaktiviert)" : res.status + " " + JSON.stringify(res.data).slice(0, 160)}`);
+    };
+    // Existiert schon -> Inputs aktualisieren (Script ist idempotent, Quelle der Wahrheit)
+    const existingId = schedByName.get(s.name);
+    const res = existingId
+      ? await api("PUT", `/schedules/${existingId}`, body)
+      : await api("POST", "/schedules", body);
+    const ok = res.status === 200 || res.status === 201;
+    console.log(`SCHEDULE ${s.name}: ${ok ? (existingId ? "aktualisiert" : "angelegt") : res.status + " " + JSON.stringify(res.data).slice(0, 160)}`);
   }
 })();

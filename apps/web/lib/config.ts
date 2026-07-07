@@ -223,8 +223,8 @@ export const WEIGHTS = {
     infotainmentLatest: 14, // starkes Plus bei neuester Generation
     parkingCamera: 6,
     accidentPenalty: 6, // leichter Minus bei Unfall/Kratzern aus Beschreibung
-    preferredMake: 6, // leicht bevorzugt: Audi/BMW/Mercedes
-    bodyStyle: 10, // Limousine top, Sportback minus, SUV nur als Coupé-SUV gut
+    preferredMake: 12, // Audi/BMW/Mercedes deutlich bevorzugt (Feedback Ante 07/2026)
+    bodyStyle: 14, // Limousine top, Sportback (Golf & Co.) klarer Minus, SUV nur als Coupé-SUV gut
     powerBonus: 8, // >= 150 PS
     lowMileage: 16,
     newerYear: 10,

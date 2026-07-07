@@ -39,12 +39,14 @@ export async function POST(request: Request) {
     if (row.raw == null) continue;
     const normalized = normalizeItem(row.source as Source, row.raw);
     if (!normalized) continue;
-    // KI-Felder in das normalisierte Objekt mergen, damit Score UND Speicherung sie behalten
+    // KI-Felder in das normalisierte Objekt mergen (KI hat Vorrang, sonst
+    // regelbasierte Erkennung aus dem Normalizer, z. B. Rohbau -> heavy)
+    const enriched = applyPriceRules(normalized);
     const n = {
-      ...applyPriceRules(normalized),
-      hasSeaViewLikely: row.hasSeaViewLikely,
-      looksLikeTouristRental: row.looksLikeTouristRental,
-      renovationNeeded: row.renovationNeeded,
+      ...enriched,
+      hasSeaViewLikely: row.hasSeaViewLikely ?? enriched.hasSeaViewLikely,
+      looksLikeTouristRental: row.looksLikeTouristRental ?? enriched.looksLikeTouristRental,
+      renovationNeeded: row.renovationNeeded ?? enriched.renovationNeeded,
     };
 
     if (!passesHardFilter(n)) {

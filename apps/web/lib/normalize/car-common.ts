@@ -67,6 +67,26 @@ export function mapBodyType(s: string | null | undefined): BodyType | null {
   return "other";
 }
 
+// Portale deklarieren Kompaktwagen oft falsch als "Saloon"/"Limousine" (z. B. Golf
+// bei mobile.de). Bekannte Fließheck-Modelle werden korrigiert — außer die Variante
+// sagt ausdrücklich Limousine/Stufenheck (z. B. "A3 Limousine").
+const HATCHBACK_MODELS =
+  /\b(golf|polo|leon|ibiza|i10|i20|i30|ceed|c[ée]ed|focus|fiesta|astra|corsa|fabia|yaris|clio|m[ée]gane|208|308|up!?|mii|citigo|swift|micra|1er|1 series|118|120|a1)\b/i;
+
+export function correctBodyType(
+  bodyType: BodyType | null,
+  model?: string | null,
+  variant?: string | null,
+): BodyType | null {
+  if (bodyType !== "limousine" && bodyType !== "other" && bodyType !== null) return bodyType;
+  const m = `${model ?? ""}`;
+  const v = `${variant ?? ""}`;
+  if (HATCHBACK_MODELS.test(m) && !/limousine|sedan|stufenheck|saloon/i.test(v)) {
+    return "sportback";
+  }
+  return bodyType;
+}
+
 /** HTML grob zu Text (Beschreibungen kommen teils als HTML). */
 export function stripHtml(s: string | null | undefined): string | null {
   if (!s) return null;

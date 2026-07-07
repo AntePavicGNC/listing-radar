@@ -12,6 +12,7 @@ export interface HouseCardData {
   aiFairPriceEstimate: number | null;
   images: string[];
   areaLivingM2: number | null;
+  areaPlotM2: number | null;
   rooms: number | null;
   yearBuilt: number | null;
   pricePerLivingM2: number | null;
@@ -117,8 +118,9 @@ export function HouseCard({ h }: { h: HouseCardData }) {
           <FlagButtons listingId={h.id} flags={flags} compact />
         </div>
 
-        <dl className="mt-auto grid grid-cols-4 gap-2 border-t border-border pt-3 text-center">
-          <Stat label="m²" value={h.areaLivingM2 ?? "–"} />
+        <dl className="mt-auto grid grid-cols-5 gap-2 border-t border-border pt-3 text-center">
+          <Stat label="Wohn-m²" value={h.areaLivingM2 ?? "–"} />
+          <Stat label="Grund-m²" value={h.areaPlotM2 != null ? Math.round(h.areaPlotM2) : "–"} />
           <Stat label="Zi." value={h.rooms ?? "–"} />
           <Stat label="Bj." value={h.yearBuilt ?? "–"} />
           <Stat label="€/m²" value={h.pricePerLivingM2 != null ? Math.round(h.pricePerLivingM2) : "–"} />

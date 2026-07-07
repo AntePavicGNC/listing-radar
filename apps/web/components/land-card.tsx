@@ -16,6 +16,7 @@ export interface LandCardData {
   pricePerM2: number | null;
   zoningStated: boolean | null;
   zoningConfirmedBuildingLand: boolean | null;
+  locationScore: number | null;
   score: number;
   scoreOverride: number | null;
   scoreBreakdown: unknown;
@@ -120,9 +121,10 @@ export function LandCard({ l }: { l: LandCardData }) {
           <FlagButtons listingId={l.id} flags={flags} compact />
         </div>
 
-        <dl className="mt-auto grid grid-cols-2 gap-2 border-t border-border pt-3 text-center">
+        <dl className="mt-auto grid grid-cols-3 gap-2 border-t border-border pt-3 text-center">
           <Stat label="m²" value={l.areaPlotM2 != null ? Math.round(l.areaPlotM2) : "–"} />
           <Stat label="€/m²" value={l.pricePerM2 != null ? Math.round(l.pricePerM2) : "–"} />
+          <Stat label="Ort" value={l.locationScore != null ? `${l.locationScore}/10` : "–"} />
         </dl>
 
         <a

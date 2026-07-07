@@ -10,6 +10,7 @@ import {
   detectParkingCamera,
   mapFuel,
   mapBodyType,
+  correctBodyType,
   stripHtml,
 } from "./car-common";
 
@@ -95,7 +96,11 @@ export function normalizeMobilede(raw: Any): NormalizedListing | null {
         ? "manual"
         : null,
     powerPs,
-    bodyType: mapBodyType(attrLike(raw, ["category", "kategorie"])),
+    bodyType: correctBodyType(
+      mapBodyType(attrLike(raw, ["category", "kategorie"])),
+      raw?.model?.localized,
+      `${attrLike(raw, ["trimline", "trim line"]) ?? ""} ${raw.title ?? ""}`,
+    ),
     distanceFromIsmaningKm: distanceFromIsmaningKm(lat, lng) ?? null,
     hasAdaptiveCruiseControl: detectAcc(featureText),
     hasParkingCamera: detectParkingCamera(featureText),

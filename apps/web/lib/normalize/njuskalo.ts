@@ -28,6 +28,13 @@ function detectZoning(text: string): {
   };
 }
 
+/** Rohbau/unfertig aus Titel/Beschreibung erkennen (Feedback Ante 07/2026). */
+function detectUnfinished(text: string): boolean {
+  return /roh[\s-]?bau|nedovr[šs]en|u\s+izgradnji|siva\s+faza|visoki\s+roh|nezavr[šs]en|unfertig|im\s+bau/i.test(
+    text,
+  );
+}
+
 export function normalizeNjuskalo(raw: NjuskaloItem): NormalizedListing | null {
   const sourceListingId = raw.adId != null ? String(raw.adId) : "";
   if (!sourceListingId) return null;
@@ -68,9 +75,22 @@ export function normalizeNjuskalo(raw: NjuskaloItem): NormalizedListing | null {
     rooms: toNum(raw.rooms),
     yearBuilt: toNum(raw.yearBuilt),
     yearRenovated: null,
+    // Rohbau/unfertig = starker Renovierungsbedarf (klarer Score-Abzug)
+    renovationNeeded:
+      vertical === "house" &&
+      detectUnfinished(`${raw.title ?? ""} ${raw.shortDescription ?? ""}`)
+        ? "heavy"
+        : null,
     // Njuskalo liefert kein explizites Garten-Feld; Grundstücksfläche als Heuristik.
     hasGarden: areaPlot != null && areaPlot > 0 ? true : null,
-    pricePerLivingM2: vertical === "house" ? toNum(raw.pricePerSqm) : null,
+    // Immer ableiten, wenn das Portal es nicht liefert (Entscheidungsgrundlage!)
+    pricePerLivingM2:
+      vertical === "house"
+        ? (toNum(raw.pricePerSqm) ??
+          (areaLiving != null && areaLiving > 0 && price > 0
+            ? Math.round((price / areaLiving) * 100) / 100
+            : null))
+        : null,
     pricePerPlotM2:
       vertical === "house" && areaPlot != null && areaPlot > 0
         ? Math.round((price / areaPlot) * 100) / 100

@@ -19,19 +19,33 @@ const FUEL_LABEL: Record<string, string> = {
   other: "Sonstige",
 };
 
+// Datenblatt-Zeile: fehlende Werte werden IMMER als "—" gezeigt (Entscheidungsgrundlage),
+// nicht versteckt — so sieht man auch, was das Portal nicht liefert.
 function Row({ label, value }: { label: string; value: string | number | null | undefined }) {
-  if (value == null || value === "") return null;
+  const missing = value == null || value === "";
   return (
     <div className="flex justify-between gap-4 border-b border-border/60 py-2 text-sm">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-right font-medium">{value}</dd>
+      <dd className={`text-right font-medium ${missing ? "text-muted-foreground/50" : ""}`}>
+        {missing ? "—" : value}
+      </dd>
     </div>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mt-5 mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+      {children}
+    </p>
   );
 }
 
 function bool(v: boolean | null): string | null {
   return v == null ? null : v ? "Ja" : "Nein";
 }
+
+const fmtDate = (d: Date) => d.toLocaleDateString("de-DE");
 
 /** Kleiner Preisverlauf als Inline-SVG (SPEC §11). */
 function PriceSparkline({ points }: { points: { date: Date; priceEur: number }[] }) {
@@ -135,77 +149,145 @@ export default async function ListingDetail(props: PageProps<"/listing/[id]">) {
               </div>
             ) : null}
 
-            <dl className="mt-6">
-              <Row label="Ort" value={l.locationRaw} />
-              {l.locationScore != null ? <Row label="Location-Score" value={`${l.locationScore}/10`} /> : null}
+            {(() => {
+              // Abgeleitete Kennzahlen (immer berechnen, wenn Basisdaten da sind)
+              const ppLiving =
+                l.pricePerLivingM2 ??
+                (l.areaLivingM2 && l.areaLivingM2 > 0 ? price / l.areaLivingM2 : null);
+              const ppPlot =
+                l.pricePerPlotM2 ??
+                (l.vertical === "land" ? l.pricePerM2 : null) ??
+                (l.areaPlotM2 && l.areaPlotM2 > 0 ? price / l.areaPlotM2 : null);
+              const daysOnline = Math.max(
+                0,
+                Math.floor((Date.now() - l.firstSeenAt.getTime()) / 86_400_000),
+              );
+              const firstPrice = l.priceHistory[0]?.priceEur ?? null;
+              const priceDelta = firstPrice != null && firstPrice !== l.priceEur ? l.priceEur - firstPrice : null;
+              const carAge =
+                l.firstRegistrationYear != null
+                  ? Math.max(0.5, new Date().getFullYear() - l.firstRegistrationYear + 0.5)
+                  : null;
 
-              {/* Haus */}
-              {l.vertical === "house" ? (
-                <>
-                  <Row label="Wohnfläche" value={l.areaLivingM2 ? `${l.areaLivingM2} m²` : null} />
-                  <Row label="Grundstück" value={l.areaPlotM2 ? `${l.areaPlotM2} m²` : null} />
-                  <Row label="Zimmer" value={l.rooms} />
-                  <Row label="Bäder" value={l.bathroomCount} />
-                  <Row label="Baujahr" value={l.yearBuilt} />
-                  <Row label="Renoviert" value={l.yearRenovated} />
-                  <Row label="€/Wohn-m²" value={l.pricePerLivingM2 ? Math.round(l.pricePerLivingM2) : null} />
-                  <Row label="€/Grundstücks-m²" value={l.pricePerPlotM2 ? Math.round(l.pricePerPlotM2) : null} />
-                  <Row label="Garten" value={bool(l.hasGarden)} />
-                  <Row label="Pool" value={bool(l.hasPool)} />
-                  <Row label="Stellplatz" value={bool(l.hasParkingSpot)} />
-                  <Row label="Garage" value={bool(l.hasGarage)} />
-                  <Row label="Klimaanlage" value={bool(l.hasAirConditioning)} />
-                  <Row label="Nebengebäude" value={bool(l.hasAuxiliaryBuilding)} />
-                  <Row label="Heizung" value={l.heatingType} />
-                  <Row label="Meerblick wahrscheinlich" value={bool(l.hasSeaViewLikely)} />
-                </>
-              ) : null}
+              return (
+                <dl className="mt-4">
+                  <SectionTitle>Lage</SectionTitle>
+                  <Row label="Ort" value={l.locationRaw} />
+                  <Row label="Location-Score (Ortstabelle)" value={l.locationScore != null ? `${l.locationScore}/10` : null} />
+                  {l.vertical === "car" ? (
+                    <Row label="Entfernung Ismaning" value={l.distanceFromIsmaningKm != null ? `${Math.round(l.distanceFromIsmaningKm)} km` : null} />
+                  ) : null}
 
-              {/* Grundstück */}
-              {l.vertical === "land" ? (
-                <>
-                  <Row label="Fläche" value={l.areaPlotM2 ? `${Math.round(l.areaPlotM2)} m²` : null} />
-                  <Row label="€/m²" value={l.pricePerM2 ? Math.round(l.pricePerM2) : null} />
-                  <Row
-                    label="Zonierung"
-                    value={
-                      l.zoningConfirmedBuildingLand === true
-                        ? "Baugrund bestätigt"
-                        : l.zoningStated === true && l.zoningConfirmedBuildingLand === false
-                          ? "Kein Baugrund"
-                          : "Unklar — bitte selbst prüfen"
-                    }
-                  />
-                </>
-              ) : null}
+                  <SectionTitle>Preis &amp; abgeleitete Kennzahlen</SectionTitle>
+                  <Row label="Preis" value={l.priceOnRequest ? "Auf Anfrage" : fmtEur(price)} />
+                  {l.displayPriceEur != null && l.displayPriceEur !== l.priceEur ? (
+                    <Row label="Portal-Preis (Rohwert)" value={fmtEur(l.priceEur)} />
+                  ) : null}
+                  {l.vertical !== "car" ? (
+                    <>
+                      {l.vertical === "house" ? (
+                        <Row label="€ / Wohn-m²" value={ppLiving ? `${Math.round(ppLiving)} €` : null} />
+                      ) : null}
+                      <Row label="€ / Grundstücks-m²" value={ppPlot ? `${Math.round(ppPlot)} €` : null} />
+                    </>
+                  ) : (
+                    <>
+                      <Row label="Finanzierungsrate" value={financingLabel(price)} />
+                      <Row label="€ pro PS" value={l.powerPs ? `${Math.round(price / l.powerPs)} €` : null} />
+                      <Row label="km pro Jahr" value={l.mileageKm != null && carAge ? `${Math.round(l.mileageKm / carAge).toLocaleString("de-DE")}` : null} />
+                    </>
+                  )}
+                  <Row label="Preisänderung seit Erstsichtung" value={priceDelta != null ? `${priceDelta > 0 ? "+" : ""}${fmtEur(priceDelta)}` : "keine"} />
 
-              {/* Auto */}
-              {l.vertical === "car" ? (
-                <>
-                  <Row label="Marke / Modell" value={[l.make, l.model, l.variant].filter(Boolean).join(" ")} />
-                  <Row
-                    label="Erstzulassung"
-                    value={
-                      l.firstRegistrationYear
-                        ? `${l.firstRegistrationMonth ? String(l.firstRegistrationMonth).padStart(2, "0") + "/" : ""}${l.firstRegistrationYear}`
-                        : null
-                    }
-                  />
-                  <Row label="Kilometerstand" value={l.mileageKm ? `${l.mileageKm.toLocaleString("de-DE")} km` : null} />
-                  <Row label="Leistung" value={l.powerPs ? `${l.powerPs} PS` : null} />
-                  <Row label="Getriebe" value={l.transmission === "automatic" ? "Automatik" : l.transmission === "manual" ? "Schaltung" : null} />
-                  <Row label="Kraftstoff" value={l.fuel ? (FUEL_LABEL[l.fuel] ?? l.fuel) : null} />
-                  <Row label="Reichweite" value={l.rangeKm ? `${l.rangeKm} km` : null} />
-                  <Row label="Karosserie" value={l.bodyType} />
-                  <Row label="Entfernung Ismaning" value={l.distanceFromIsmaningKm != null ? `${Math.round(l.distanceFromIsmaningKm)} km` : null} />
-                  <Row label="Adaptiver Tempomat" value={bool(l.hasAdaptiveCruiseControl)} />
-                  <Row label="Einparkkamera" value={bool(l.hasParkingCamera)} />
-                  <Row label="Infotainment" value={l.infotainmentGeneration} />
-                </>
-              ) : null}
+                  {l.vertical === "house" ? (
+                    <>
+                      <SectionTitle>Objekt</SectionTitle>
+                      <Row label="Wohnfläche" value={l.areaLivingM2 ? `${l.areaLivingM2} m²` : null} />
+                      <Row label="Grundstück" value={l.areaPlotM2 ? `${l.areaPlotM2} m²` : null} />
+                      <Row label="Zimmer" value={l.rooms} />
+                      <Row label="Bäder" value={l.bathroomCount} />
+                      <Row label="Baujahr" value={l.yearBuilt} />
+                      <Row label="Renoviert" value={l.yearRenovated} />
+                      <Row
+                        label="Renovierungsbedarf"
+                        value={
+                          l.renovationNeeded
+                            ? ({ none: "keiner", light: "leicht", moderate: "mittel", heavy: "stark / Rohbau" } as const)[l.renovationNeeded]
+                            : null
+                        }
+                      />
+                      <SectionTitle>Ausstattung</SectionTitle>
+                      <Row label="Garten" value={bool(l.hasGarden)} />
+                      <Row label="Pool" value={bool(l.hasPool)} />
+                      <Row label="Stellplatz" value={bool(l.hasParkingSpot)} />
+                      <Row label="Garage" value={bool(l.hasGarage)} />
+                      <Row label="Klimaanlage" value={bool(l.hasAirConditioning)} />
+                      <Row label="Nebengebäude" value={bool(l.hasAuxiliaryBuilding)} />
+                      <Row label="Heizung" value={l.heatingType} />
+                      <Row label="Meerblick wahrscheinlich (KI)" value={bool(l.hasSeaViewLikely)} />
+                      <Row label="Ferienvermietungs-Optik (KI)" value={bool(l.looksLikeTouristRental)} />
+                    </>
+                  ) : null}
 
-              {l.aiImageScore != null ? <Row label="KI-Bild-Score" value={`${l.aiImageScore}/100`} /> : null}
-            </dl>
+                  {l.vertical === "land" ? (
+                    <>
+                      <SectionTitle>Grundstück</SectionTitle>
+                      <Row label="Fläche" value={l.areaPlotM2 ? `${Math.round(l.areaPlotM2)} m²` : null} />
+                      <Row
+                        label="Zonierung"
+                        value={
+                          l.zoningConfirmedBuildingLand === true
+                            ? "Baugrund bestätigt"
+                            : l.zoningStated === true && l.zoningConfirmedBuildingLand === false
+                              ? "Kein Baugrund"
+                              : "Unklar — bitte selbst prüfen"
+                        }
+                      />
+                    </>
+                  ) : null}
+
+                  {l.vertical === "car" ? (
+                    <>
+                      <SectionTitle>Fahrzeug</SectionTitle>
+                      <Row label="Marke / Modell" value={[l.make, l.model].filter(Boolean).join(" ") || null} />
+                      <Row label="Variante" value={l.variant} />
+                      <Row
+                        label="Erstzulassung"
+                        value={
+                          l.firstRegistrationYear
+                            ? `${l.firstRegistrationMonth ? String(l.firstRegistrationMonth).padStart(2, "0") + "/" : ""}${l.firstRegistrationYear}`
+                            : null
+                        }
+                      />
+                      <Row label="Kilometerstand" value={l.mileageKm != null ? `${l.mileageKm.toLocaleString("de-DE")} km` : null} />
+                      <Row label="Leistung" value={l.powerPs ? `${l.powerPs} PS` : null} />
+                      <Row label="Getriebe" value={l.transmission === "automatic" ? "Automatik" : l.transmission === "manual" ? "Schaltung" : null} />
+                      <Row label="Kraftstoff" value={l.fuel ? (FUEL_LABEL[l.fuel] ?? l.fuel) : null} />
+                      <Row label="Reichweite (Elektro)" value={l.rangeKm ? `${l.rangeKm} km` : null} />
+                      <Row
+                        label="Karosserie"
+                        value={
+                          l.bodyType
+                            ? ({ limousine: "Limousine", sportback: "Sportback/Fließheck", suv: "SUV", suv_coupe: "Coupé-SUV", kombi: "Kombi", other: "Sonstige" } as const)[l.bodyType]
+                            : null
+                        }
+                      />
+                      <SectionTitle>Ausstattung</SectionTitle>
+                      <Row label="Adaptiver Tempomat (ACC)" value={bool(l.hasAdaptiveCruiseControl)} />
+                      <Row label="Einparkkamera" value={bool(l.hasParkingCamera)} />
+                      <Row label="Infotainment-Generation" value={l.infotainmentGeneration} />
+                    </>
+                  ) : null}
+
+                  <SectionTitle>Inserat</SectionTitle>
+                  <Row label="Quelle" value={l.source} />
+                  <Row label="Online seit (bei uns)" value={`${fmtDate(l.firstSeenAt)} (${daysOnline} Tag${daysOnline === 1 ? "" : "e"})`} />
+                  <Row label="Zuletzt gesehen" value={fmtDate(l.lastSeenAt)} />
+                  <Row label="Vom Portal eingestellt" value={l.postedAt ? fmtDate(l.postedAt) : null} />
+                  {l.vertical !== "car" ? <Row label="KI-Bild-Score" value={l.aiImageScore != null ? `${l.aiImageScore}/100` : null} /> : null}
+                </dl>
+              );
+            })()}
             {l.aiImageNotes ? (
               <p className="mt-3 rounded-xl bg-muted p-3 text-xs leading-relaxed text-foreground/75">
                 <span className="font-medium">KI-Bewertung:</span> {l.aiImageNotes}
