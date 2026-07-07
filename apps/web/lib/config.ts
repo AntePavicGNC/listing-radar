@@ -206,7 +206,7 @@ export const WEIGHTS = {
     auxBuilding: 3, // Sommerküche/Gästehaus
     airConditioning: 6, // starkes Plus
     modern: 10, // Baujahr/Renovierung gestuft
-    renovation: 6,
+    renovation: 18, // Rohbau/heavy muss klar abwerten (Feedback Ante 07/2026)
     seaView: 4,
     touristPenalty: 4, // Minus bei Ferienvilla-Optik
     aiImage: 8,
