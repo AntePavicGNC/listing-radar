@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ingestDataset } from "@/lib/ingest";
+import { ingestNjuskaloDetails } from "@/lib/ingest-detail";
 import type { Source } from "@/lib/normalize/types";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,9 @@ export async function POST(request: Request) {
   }
 
   const source = url.searchParams.get("source") ?? "";
-  if (!VALID_SOURCES.includes(source as Source)) {
+  // "njuskalo-detail" ist KEINE eigene Quelle: der Detail-Actor reichert
+  // bestehende njuskalo-Inserate an (Merge statt Upsert, lib/ingest-detail.ts)
+  if (source !== "njuskalo-detail" && !VALID_SOURCES.includes(source as Source)) {
     return NextResponse.json({ error: "invalid or missing source" }, { status: 400 });
   }
 
@@ -40,8 +43,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await ingestDataset(source as Source, datasetId);
-    return NextResponse.json({ ok: true, ...result });
+    const result =
+      source === "njuskalo-detail"
+        ? await ingestNjuskaloDetails(datasetId)
+        : await ingestDataset(source as Source, datasetId);
+    return NextResponse.json({ ok: true, source, ...result });
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : String(e) },

@@ -1,0 +1,11 @@
+{
+  "actorSpecification": 1,
+  "name": "njuskalo-detail-scraper",
+  "title": "Njuskalo Detail Scraper (alle Bilder + Strukturdaten)",
+  "description": "Besucht Njuskalo-Detailseiten und extrahiert alle Bilder, die 'Osnovni podaci'-Tabelle (Baujahr, Zimmer, Flächen …) und die volle Beschreibung. Teil von Listing Radar.",
+  "version": "0.1",
+  "buildTag": "latest",
+  "meta": { "templateId": "ts-crawlee-playwright-chrome" },
+  "input": "./input_schema.json",
+  "dockerfile": "../Dockerfile"
+}

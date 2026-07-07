@@ -15,6 +15,8 @@ const ACTORS = [
   { id: "memo23~mobile-de-scraper", source: "mobilede" },
   { id: "cinnamon_badge~autohero-scraper", source: "autohero" },
   { id: "cinnamon_badge~index-oglasi-scraper", source: "indexoglasi" },
+  // Detail-Anreicherung: merged in bestehende njuskalo-Inserate (kein Upsert)
+  { id: "cinnamon_badge~njuskalo-detail-scraper", source: "njuskalo-detail" },
 ];
 
 const SLUGS = ["zadar","bibinje","sukosan","nin","privlaka","razanac","vrsi","petrcane","zaton","radovin","poljica","ljubac","sveti-petar-na-moru","jovici"];
@@ -104,6 +106,20 @@ async function api(method, path, body) {
           maxItems: 150,
           maxPages: 8,
           proxyConfiguration: { useApifyProxy: true, apifyProxyGroups: ["RESIDENTIAL"], apifyProxyCountry: "DE" },
+        },
+      ],
+    },
+    {
+      // Nach dem Njuskalo-Suchlauf (Mo 05:30) + Ingest: Detailseiten der besten
+      // Inserate ohne Detail-Daten scrapen (Queue kommt live aus der App).
+      name: "listing-radar-njuskalo-detail-weekly",
+      cronExpression: "0 7 * * 1",
+      actorId: "cinnamon_badge~njuskalo-detail-scraper",
+      runs: [
+        {
+          queueUrl: `${APP}/api/detail-queue?secret=${SECRET}&limit=150`,
+          maxItems: 150,
+          proxyConfiguration: { useApifyProxy: true, apifyProxyGroups: ["RESIDENTIAL"], apifyProxyCountry: "HR" },
         },
       ],
     },

@@ -1,0 +1,38 @@
+{
+  "title": "Njuskalo Detail Scraper Input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "queueUrl": {
+      "title": "Queue-URL (Listing Radar)",
+      "type": "string",
+      "editor": "textfield",
+      "description": "Optional: URL, die eine JSON-Liste {items:[{url:...}]} der zu scrapenden Detailseiten liefert (z. B. /api/detail-queue der App). Alternativ startUrls setzen."
+    },
+    "startUrls": {
+      "title": "Detail-URLs",
+      "type": "array",
+      "editor": "requestListSources",
+      "description": "Direkte Njuskalo-Detailseiten-URLs (alternativ zur Queue-URL).",
+      "prefill": []
+    },
+    "maxItems": {
+      "title": "Max. Detailseiten",
+      "type": "integer",
+      "default": 100,
+      "minimum": 1,
+      "description": "Obergrenze der besuchten Detailseiten pro Lauf."
+    },
+    "proxyConfiguration": {
+      "title": "Proxy",
+      "type": "object",
+      "editor": "proxy",
+      "prefill": {
+        "useApifyProxy": true,
+        "apifyProxyGroups": ["RESIDENTIAL"],
+        "apifyProxyCountry": "HR"
+      },
+      "description": "Apify-Proxy (RESIDENTIAL + HR nötig, Njuskalo ist bot-geschützt)."
+    }
+  }
+}

@@ -4,6 +4,7 @@
 // CDN-Host ist (noch) unbekannt -> images bleibt vorerst leer.
 import { createHash } from "node:crypto";
 import type { NormalizedListing } from "./types";
+import { extractAreas, extractRooms, extractYearBuilt } from "./text-extract";
 
 type Any = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -31,7 +32,11 @@ export function normalizeIndexOglasi(raw: Any): NormalizedListing | null {
   const vertical = category.includes("land") ? "land" : "house";
 
   const price = Math.round(Number(raw.price ?? 0)); // 1-Euro-Fakes fängt lib/enrich.ts
-  const area = raw?.summary?.area != null ? Number(raw.summary.area) : null;
+  const titleText = String(raw.title ?? "");
+  const fromText = extractAreas(titleText);
+  const area =
+    (raw?.summary?.area != null ? Number(raw.summary.area) : null) ??
+    (vertical === "land" ? (fromText.plot ?? fromText.any) : (fromText.living ?? fromText.any));
 
   // permutiveData.location: ["HRVATSKA", "Zadarska", "Zadar", "Borik"] (grob -> fein)
   const loc: string[] = Array.isArray(raw?.permutiveData?.location) ? raw.permutiveData.location : [];
@@ -64,9 +69,11 @@ export function normalizeIndexOglasi(raw: Any): NormalizedListing | null {
     postedAt: raw.postedTime ? new Date(raw.postedTime) : null,
 
     areaLivingM2: vertical === "house" ? area : null,
-    areaPlotM2: vertical === "land" ? area : null,
-    rooms: null,
-    yearBuilt: raw?.summary?.yearBuilt != null ? Number(raw.summary.yearBuilt) : null,
+    areaPlotM2: vertical === "land" ? area : (fromText.plot ?? null),
+    rooms: vertical === "house" ? extractRooms(titleText) : null,
+    yearBuilt:
+      (raw?.summary?.yearBuilt != null ? Number(raw.summary.yearBuilt) : null) ??
+      (vertical === "house" ? extractYearBuilt(titleText) : null),
     yearRenovated: null,
     hasGarden: null,
     pricePerLivingM2:

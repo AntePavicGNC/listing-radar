@@ -8,6 +8,7 @@ import { passesHardFilter } from "./filters";
 import { computeScore, type ScoreResult } from "./score";
 import { sendPushToAll } from "./push";
 import { dedupeKey } from "./dedupe";
+import { getEffectiveSettings } from "./settings";
 import type { NormalizedListing, Source } from "./normalize/types";
 
 export interface IngestResult {
@@ -86,6 +87,7 @@ export function commonFields(n: NormalizedListing, s: ScoreResult, key: string, 
 
 export async function ingestDataset(source: Source, datasetId: string): Promise<IngestResult> {
   const items = await getDatasetItems(datasetId);
+  const { weights, filters } = await getEffectiveSettings();
   let passed = 0;
   let upserted = 0;
   let priceChanges = 0;
@@ -98,7 +100,7 @@ export async function ingestDataset(source: Source, datasetId: string): Promise<
     if (!normalized) continue;
     // Fake-Preis / "Preis auf Anfrage" VOR Filter und Scoring auflösen (SPEC §9)
     const n = applyPriceRules(normalized);
-    if (!passesHardFilter(n)) continue;
+    if (!passesHardFilter(n, filters)) continue;
     passed++;
 
     const key = dedupeKey(n);
@@ -122,7 +124,7 @@ export async function ingestDataset(source: Source, datasetId: string): Promise<
     }
 
     // Score NACH dem KI-Merge berechnen, damit die Anreicherung einfließt
-    const score = computeScore({ ...n, aiImageScore: existing?.aiImageScore ?? null });
+    const score = computeScore({ ...n, aiImageScore: existing?.aiImageScore ?? null }, weights);
 
     const fields = commonFields(n, score, key, now);
     await prisma.listing.upsert({

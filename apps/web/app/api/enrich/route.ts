@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { reviewListingImages } from "@/lib/ai/image-review";
 import { computeScore, type Scorable } from "@/lib/score";
+import { getEffectiveSettings } from "@/lib/settings";
 import { listImage } from "@/components/listing-bits";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
   }
 
   const limit = Math.min(Number(url.searchParams.get("limit") ?? DEFAULT_LIMIT), 100);
+  const { weights } = await getEffectiveSettings();
 
   // Fehlgeschlagene nicht endlos wiederholen (⚠-Marker in aiImageNotes).
   // OR mit null nötig: SQL-NOT-LIKE filtert NULL-Werte sonst mit raus.
@@ -77,7 +79,7 @@ export async function POST(request: Request) {
           looksLikeTouristRental: review.looksLikeTouristRental,
           renovationNeeded: review.renovationNeeded === "unknown" ? null : review.renovationNeeded,
         } as unknown as Scorable;
-        const s = computeScore(scorable);
+        const s = computeScore(scorable, weights);
 
         await prisma.listing.update({
           where: { id: l.id },

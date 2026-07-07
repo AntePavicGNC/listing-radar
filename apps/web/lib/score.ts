@@ -83,9 +83,15 @@ function qualify(v: number, goodText: string, okText: string, badText: string): 
   return v >= 0.7 ? goodText : v >= 0.4 ? okText : badText;
 }
 
+/** Gewichtssatz (Default WEIGHTS, oder aus /settings gemergte Overrides). */
+export type WeightSet = {
+  house: Record<keyof typeof WEIGHTS.house, number>;
+  land: Record<keyof typeof WEIGHTS.land, number>;
+  car: Record<keyof typeof WEIGHTS.car, number>;
+};
+
 // ---------------------------------------------------------------- Häuser
-function scoreHouse(l: Scorable): { p: Parts; loc: number | null } {
-  const w = WEIGHTS.house;
+function scoreHouse(l: Scorable, w: WeightSet["house"]): { p: Parts; loc: number | null } {
   const p = new Parts();
   const price = l.displayPriceEur ?? l.priceEur;
 
@@ -179,8 +185,7 @@ function scoreHouse(l: Scorable): { p: Parts; loc: number | null } {
 }
 
 // ---------------------------------------------------------------- Grundstücke
-function scoreLand(l: Scorable): { p: Parts; loc: number | null } {
-  const w = WEIGHTS.land;
+function scoreLand(l: Scorable, w: WeightSet["land"]): { p: Parts; loc: number | null } {
   const p = new Parts();
   const price = l.displayPriceEur ?? l.priceEur;
 
@@ -232,8 +237,7 @@ function detectAccidentMention(text: string): boolean {
   );
 }
 
-function scoreCar(l: Scorable): { p: Parts; loc: number | null } {
-  const w = WEIGHTS.car;
+function scoreCar(l: Scorable, w: WeightSet["car"]): { p: Parts; loc: number | null } {
   const p = new Parts();
   const price = l.displayPriceEur ?? l.priceEur;
 
@@ -302,8 +306,12 @@ function scoreCar(l: Scorable): { p: Parts; loc: number | null } {
  * Berechnet Gesamt-Score (0-100), vollständigen Breakdown und Location-Score.
  * Anzeige-Logik: `scoreOverride ?? score` (SPEC §9).
  */
-export function computeScore(l: Scorable): ScoreResult {
+export function computeScore(l: Scorable, weights: WeightSet = WEIGHTS): ScoreResult {
   const { p, loc } =
-    l.vertical === "house" ? scoreHouse(l) : l.vertical === "land" ? scoreLand(l) : scoreCar(l);
+    l.vertical === "house"
+      ? scoreHouse(l, weights.house)
+      : l.vertical === "land"
+        ? scoreLand(l, weights.land)
+        : scoreCar(l, weights.car);
   return { score: totalScore(p.parts), breakdown: toBreakdown(p), locationScore: loc };
 }

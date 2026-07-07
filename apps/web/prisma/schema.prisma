@@ -105,6 +105,8 @@ model Listing {
   aiImageScore Int? // 0-100, nur Häuser/Grundstücke
   aiImageNotes String?
 
+  detailScrapedAt DateTime? // njuskalo-detail-Actor hat die Detailseite geliefert
+
   dedupeKey String? // gerundeter Preis + Fläche/km + Stadt (SPEC §6)
 
   // --- Haus ---
@@ -190,5 +192,12 @@ model UserFlag {
   favorite  Boolean  @default(false)
   hidden    Boolean  @default(false) // "raus"
   seen      Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+// Nutzer-Einstellungen (Gewichte/Filter-Overrides), key z. B. "weights" | "filters"
+model AppSetting {
+  key       String   @id
+  value     Json
   updatedAt DateTime @updatedAt
 }

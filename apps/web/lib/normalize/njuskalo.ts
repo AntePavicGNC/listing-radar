@@ -2,6 +2,7 @@
 // Feldnamen wurden per echtem Test-Run verifiziert (SPEC §4/§7).
 import { createHash } from "node:crypto";
 import type { NormalizedListing } from "./types";
+import { extractAreas, extractRooms, extractYearBuilt } from "./text-extract";
 
 export function makeId(source: string, sourceListingId: string): string {
   return createHash("sha256").update(`${source}:${sourceListingId}`).digest("hex").slice(0, 24);
@@ -45,8 +46,18 @@ export function normalizeNjuskalo(raw: NjuskaloItem): NormalizedListing | null {
     : raw.mainImageUrl
       ? [String(raw.mainImageUrl)]
       : [];
-  const areaLiving = toNum(raw.areaSqm);
-  const areaPlot = toNum(raw.terrainAreaSqm);
+  const text = `${raw.title ?? ""} ${raw.shortDescription ?? ""}`;
+  // Fallback: Flächen/Zimmer/Baujahr aus dem Text ziehen, wenn der Actor sie
+  // nicht liefert (Actor-Werte haben immer Vorrang vor Text-Extraktion)
+  const fromText = extractAreas(text);
+  const actorArea = toNum(raw.areaSqm); // bei Land = Grundstücksfläche
+  const actorPlot = toNum(raw.terrainAreaSqm);
+  const areaLiving =
+    vertical === "house" ? (actorArea ?? fromText.living ?? fromText.any) : null;
+  const areaPlot =
+    vertical === "land"
+      ? (actorPlot ?? actorArea ?? fromText.plot ?? fromText.any)
+      : (actorPlot ?? fromText.plot);
   const price = Math.round(toNum(raw.price) ?? 0);
 
   const locationRaw =
@@ -70,10 +81,10 @@ export function normalizeNjuskalo(raw: NjuskaloItem): NormalizedListing | null {
     lng: toNum(raw.longitude),
     postedAt: raw.datePosted ? new Date(String(raw.datePosted)) : null,
 
-    areaLivingM2: vertical === "house" ? areaLiving : null,
-    areaPlotM2: areaPlot ?? (vertical === "land" ? areaLiving : null),
-    rooms: toNum(raw.rooms),
-    yearBuilt: toNum(raw.yearBuilt),
+    areaLivingM2: areaLiving,
+    areaPlotM2: areaPlot,
+    rooms: toNum(raw.rooms) ?? (vertical === "house" ? extractRooms(text) : null),
+    yearBuilt: toNum(raw.yearBuilt) ?? (vertical === "house" ? extractYearBuilt(text) : null),
     yearRenovated: null,
     // Rohbau/unfertig = starker Renovierungsbedarf (klarer Score-Abzug)
     renovationNeeded:
@@ -102,8 +113,8 @@ export function normalizeNjuskalo(raw: NjuskaloItem): NormalizedListing | null {
     pricePerM2:
       vertical === "land"
         ? (toNum(raw.pricePerSqm) ??
-          (areaLiving != null && areaLiving > 0 && price > 0
-            ? Math.round((price / areaLiving) * 100) / 100
+          (areaPlot != null && areaPlot > 0 && price > 0
+            ? Math.round((price / areaPlot) * 100) / 100
             : null))
         : null,
 

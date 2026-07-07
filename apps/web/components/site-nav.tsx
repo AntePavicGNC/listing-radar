@@ -5,6 +5,7 @@ const TABS = [
   { href: "/houses", label: "Häuser" },
   { href: "/cars", label: "Autos" },
   { href: "/compare", label: "Vergleich" },
+  { href: "/settings", label: "Einstellungen" },
 ];
 
 /** Schlichte Bereichs-Navigation über allen Ansichten. */
